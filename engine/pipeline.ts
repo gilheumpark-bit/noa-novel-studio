@@ -61,7 +61,12 @@ export function buildSystemInstruction(
   const totalEpisodes = config.totalEpisodes ?? 25;
   const actInfo = getActFromEpisode(config.episode, totalEpisodes);
   const targetTension = Math.round(tensionCurve(config.episode, totalEpisodes, config.genre) * 100);
-  const byteTarget = getTargetByteRange(platform);
+  // Use user-defined guardrails (character count) if set, otherwise fall back to platform byte defaults
+  // Korean: ~3 bytes per char on average (UTF-8)
+  const guardrailBytes = config.guardrails
+    ? { min: config.guardrails.min * 3, max: config.guardrails.max * 3 }
+    : getTargetByteRange(platform);
+  const byteTarget = guardrailBytes;
   const isKO = language === 'KO';
   const actGuide = ACT_GUIDELINES[actInfo.act] ?? ACT_GUIDELINES[1];
   const genreGuide = GENRE_GUIDELINES[config.genre] ?? '';
@@ -113,8 +118,9 @@ ${characterDNA}
 
 ${ans95Sections ? `${ans95Sections}\n\n` : ''}[SERIALIZATION CONSTRAINTS]
 - Platform: ${platform}
-- Target byte range: ${(byteTarget.min / 1024).toFixed(1)}KB ~ ${(byteTarget.max / 1024).toFixed(1)}KB
-- 서사를 4개 파트로 나누어 출력하되, 바이트 목표 범위 내에서 마무리하십시오.
+- Target character count: ${config.guardrails.min}자 ~ ${config.guardrails.max}자 (약 ${(byteTarget.min / 1024).toFixed(1)}KB ~ ${(byteTarget.max / 1024).toFixed(1)}KB)
+- 반드시 최소 ${config.guardrails.min}자 이상, 최대 ${config.guardrails.max}자 이하로 작성하십시오.
+- 서사를 4개 파트로 나누어 출력하되, 목표 글자 수 범위 내에서 마무리하십시오.
 
 [QUALITY DIRECTIVES]
 - AI톤 금지: "그러나", "반면에", "한편으로는", "따라서", "그러므로" 사용 자제

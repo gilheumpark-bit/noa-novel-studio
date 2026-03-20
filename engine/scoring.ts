@@ -170,7 +170,32 @@ export function generateEngineReport(
   }
 
   const byteSize = calculateByteSize(text);
-  const targetRange = getTargetByteRange(platform);
+  const charCount = text.length;
+  // Use user guardrails (char count → bytes) if available, otherwise platform defaults
+  const targetRange = config.guardrails
+    ? { min: config.guardrails.min * 3, max: config.guardrails.max * 3 }
+    : getTargetByteRange(platform);
+
+  // Also check character count against guardrails
+  if (config.guardrails) {
+    if (charCount < config.guardrails.min) {
+      issues.push({
+        category: 'serialization',
+        message: `글자 수 미달: ${charCount}자 / 최소 ${config.guardrails.min}자`,
+        episode: config.episode,
+        severity: 1,
+        suggestion: '더 풍부한 묘사와 장면 확장이 필요합니다.',
+      });
+    } else if (charCount > config.guardrails.max) {
+      issues.push({
+        category: 'serialization',
+        message: `글자 수 초과: ${charCount}자 / 최대 ${config.guardrails.max}자`,
+        episode: config.episode,
+        severity: 1,
+        suggestion: '불필요한 묘사를 줄이고 장면을 압축하세요.',
+      });
+    }
+  }
 
   const avgScore = (metrics.tension + metrics.pacing + metrics.immersion + eosScore) / 4;
   const grade = calculateGrade(avgScore);
