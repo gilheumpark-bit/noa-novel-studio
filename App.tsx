@@ -1,0 +1,540 @@
+
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Plus, Settings, Send,
+  Sparkles, Menu, Globe, UserCircle,
+  BookOpen, Zap, Ghost, X, PenTool, History, StopCircle
+} from 'lucide-react';
+import {
+  Message, StoryConfig, Genre,
+  AppLanguage, AppTab, PlatformType
+} from './types';
+import { TRANSLATIONS, ENGINE_VERSION } from './constants';
+import { EngineReport } from './engine/types';
+import ChatMessage from './components/ChatMessage';
+import PlanningView from './components/PlanningView';
+import ResourceView from './components/ResourceView';
+import SettingsView from './components/SettingsView';
+import RulebookView from './components/RulebookView';
+import EngineDashboard from './components/EngineDashboard';
+import EngineStatusBar from './components/EngineStatusBar';
+import ApiKeyModal from './components/ApiKeyModal';
+import { generateStoryStream } from './services/geminiService';
+
+const STORAGE_KEY_SESSIONS = 'noa_chat_sessions_v2';
+
+interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  config: StoryConfig;
+  lastUpdate: number;
+}
+
+const INITIAL_CONFIG: StoryConfig = {
+  genre: Genre.SYSTEM_HUNTER,
+  povCharacter: "",
+  setting: "",
+  primaryEmotion: "",
+  episode: 1,
+  title: "",
+  totalEpisodes: 25,
+  guardrails: { min: 3000, max: 5000 },
+  characters: [],
+  platform: PlatformType.MOBILE,
+};
+
+function App() {
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return parsed.length > 0 ? parsed[0].id : null;
+  });
+
+  const [activeTab, setActiveTab] = useState<AppTab>('world');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [language, setLanguage] = useState<AppLanguage>('KO');
+  const [input, setInput] = useState('');
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [lastReport, setLastReport] = useState<EngineReport | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const currentSession = sessions.find(s => s.id === currentSessionId) || null;
+  const t = TRANSLATIONS[language] || TRANSLATIONS['KO'];
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsSidebarOpen(window.innerWidth >= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+  }, [sessions]);
+
+  useEffect(() => {
+    if (activeTab === 'writing') {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [currentSession?.messages, isGenerating, activeTab]);
+
+  const createNewSession = () => {
+    const sessionTitles: Record<AppLanguage, string> = { KO: "새로운 소설", EN: "New Story", JP: "新しい小説", CN: "新小说" };
+    const newSession: ChatSession = {
+      id: `session-${Date.now()}`,
+      title: sessionTitles[language],
+      messages: [],
+      config: { ...INITIAL_CONFIG },
+      lastUpdate: Date.now()
+    };
+    setSessions([newSession, ...sessions]);
+    setCurrentSessionId(newSession.id);
+    setActiveTab('world');
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  const handleTabChange = (tab: AppTab) => {
+    setActiveTab(tab);
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  const deleteSession = (sessionIdToDelete: string) => {
+    const sessionToDelete = sessions.find(s => s.id === sessionIdToDelete);
+    if (!sessionToDelete) return;
+    const confirmMsg = ({ KO: `'${sessionToDelete.title}' 아카이브를 삭제하시겠습니까?`, EN: `Delete '${sessionToDelete.title}'?`, JP: `'${sessionToDelete.title}'を削除しますか？`, CN: `删除 '${sessionToDelete.title}'？` })[language];
+    if (window.confirm(confirmMsg)) {
+      const newSessions = sessions.filter(s => s.id !== sessionIdToDelete);
+      setSessions(newSessions);
+      if (currentSessionId === sessionIdToDelete) {
+        setCurrentSessionId(newSessions.length > 0 ? newSessions[0].id : null);
+        if (newSessions.length === 0) setActiveTab('world');
+      }
+    }
+  };
+
+  const clearAllSessions = () => {
+    const confirmMsg = ({ KO: "모든 세션을 삭제하시겠습니까?", EN: "Delete all sessions?", JP: "すべてのセッションを削除しますか？", CN: "删除所有会话？" })[language];
+    if (window.confirm(confirmMsg)) {
+      setSessions([]);
+      setCurrentSessionId(null);
+      localStorage.removeItem(STORAGE_KEY_SESSIONS);
+      setActiveTab('world');
+    }
+  };
+
+  const updateCurrentSession = (updates: Partial<ChatSession>) => {
+    if (!currentSessionId) return;
+    setSessions(prev => prev.map(s =>
+      s.id === currentSessionId ? { ...s, ...updates, lastUpdate: Date.now() } : s
+    ));
+  };
+
+  const setConfig = (newConfig: any) => {
+    if (typeof newConfig === 'function') {
+      updateCurrentSession({ config: newConfig(currentSession?.config) });
+    } else {
+      updateCurrentSession({ config: newConfig });
+    }
+  };
+
+  const handleCancel = () => {
+    abortControllerRef.current?.abort();
+    setIsGenerating(false);
+  };
+
+  const handleSend = async (customPrompt?: string) => {
+    const text = customPrompt || input;
+    if (!text.trim() || isGenerating || !currentSessionId) return;
+
+    const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', content: text, timestamp: Date.now() };
+    const aiMsgId = `a-${Date.now()}`;
+    const initialAiMsg: Message = { id: aiMsgId, role: 'assistant', content: '', timestamp: Date.now() };
+
+    // Capture existing messages BEFORE adding new ones (for history)
+    const existingMessages = currentSession?.messages || [];
+
+    const updatedMessages = [...existingMessages, userMsg, initialAiMsg];
+    updateCurrentSession({
+      messages: updatedMessages,
+      title: existingMessages.length === 0 ? text.substring(0, 15) : currentSession?.title
+    });
+    setInput('');
+    setIsGenerating(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      let fullContent = '';
+      const result = await generateStoryStream(
+        currentSession!.config,
+        text,
+        (chunk) => {
+          fullContent += chunk;
+          setSessions(prev => prev.map(s => {
+            if (s.id === currentSessionId) {
+              const msgs = s.messages.map(m => m.id === aiMsgId ? { ...m, content: fullContent } : m);
+              return { ...s, messages: msgs };
+            }
+            return s;
+          }));
+        },
+        {
+          language,
+          signal: controller.signal,
+          platform: currentSession!.config.platform,
+          history: existingMessages,
+        }
+      );
+
+      // Store engine report on the message meta
+      setLastReport(result.report);
+      setSessions(prev => prev.map(s => {
+        if (s.id === currentSessionId) {
+          const msgs = s.messages.map(m =>
+            m.id === aiMsgId
+              ? { ...m, content: fullContent, meta: { engineReport: result.report, grade: result.report.grade, eosScore: result.report.eosScore, metrics: result.report.metrics } }
+              : m
+          );
+          return { ...s, messages: msgs };
+        }
+        return s;
+      }));
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error(error);
+      }
+    } finally {
+      setIsGenerating(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleRegenerate = async (assistantMsgId: string) => {
+    if (isGenerating || !currentSessionId || !currentSession) return;
+
+    // Find the user message right before this assistant message
+    const msgIndex = currentSession.messages.findIndex(m => m.id === assistantMsgId);
+    if (msgIndex <= 0) return;
+    const userMsg = currentSession.messages[msgIndex - 1];
+    if (userMsg.role !== 'user') return;
+
+    // History = everything before the user message
+    const historyMessages = currentSession.messages.slice(0, msgIndex - 1);
+
+    // Clear the assistant message content
+    setSessions(prev => prev.map(s => {
+      if (s.id === currentSessionId) {
+        const msgs = s.messages.map(m => m.id === assistantMsgId ? { ...m, content: '', meta: undefined } : m);
+        return { ...s, messages: msgs };
+      }
+      return s;
+    }));
+    setIsGenerating(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      let fullContent = '';
+      const result = await generateStoryStream(
+        currentSession.config,
+        userMsg.content,
+        (chunk) => {
+          fullContent += chunk;
+          setSessions(prev => prev.map(s => {
+            if (s.id === currentSessionId) {
+              const msgs = s.messages.map(m => m.id === assistantMsgId ? { ...m, content: fullContent } : m);
+              return { ...s, messages: msgs };
+            }
+            return s;
+          }));
+        },
+        {
+          language,
+          signal: controller.signal,
+          platform: currentSession.config.platform,
+          history: historyMessages,
+        }
+      );
+
+      setLastReport(result.report);
+      setSessions(prev => prev.map(s => {
+        if (s.id === currentSessionId) {
+          const msgs = s.messages.map(m =>
+            m.id === assistantMsgId
+              ? { ...m, content: fullContent, meta: { engineReport: result.report, grade: result.report.grade, eosScore: result.report.eosScore, metrics: result.report.metrics } }
+              : m
+          );
+          return { ...s, messages: msgs };
+        }
+        return s;
+      }));
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error(error);
+      }
+    } finally {
+      setIsGenerating(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleNextEpisode = () => {
+    if (!currentSession) return;
+    const nextEp = Math.min(currentSession.config.episode + 1, currentSession.config.totalEpisodes);
+    setConfig({ ...currentSession.config, episode: nextEp });
+  };
+
+  return (
+    <div className="flex h-screen bg-[#050505] text-zinc-300 font-sans overflow-hidden">
+      {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/60 z-40 md:hidden" />}
+
+      {/* Sidebar */}
+      <aside className={`fixed md:relative inset-y-0 left-0 bg-black border-r border-zinc-900 transition-transform md:transition-all duration-300 flex flex-col z-50 overflow-hidden ${isSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0 md:w-0'}`}>
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-8">
+            <Zap className="w-6 h-6 text-blue-500" />
+            <h1 className="text-lg font-black italic tracking-tighter">NOA STUDIO</h1>
+          </div>
+          <button onClick={createNewSession} className="w-full flex items-center justify-center gap-2 py-3 bg-zinc-900 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-zinc-800 transition-all mb-8 border border-zinc-800">
+            <Plus className="w-4 h-4" /> {t.sidebar.newProject}
+          </button>
+
+          <nav className="space-y-1">
+            {([
+              { tab: 'world' as AppTab, icon: Globe, label: t.sidebar.worldBible },
+              { tab: 'characters' as AppTab, icon: UserCircle, label: t.sidebar.characterStudio },
+              { tab: 'rulebook' as AppTab, icon: BookOpen, label: t.sidebar.rulebook },
+              { tab: 'writing' as AppTab, icon: PenTool, label: t.sidebar.writingMode },
+              { tab: 'history' as AppTab, icon: History, label: t.sidebar.archives },
+            ]).map(({ tab, icon: Icon, label }) => (
+              <button key={tab} onClick={() => handleTabChange(tab)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-zinc-500 hover:bg-zinc-900'}`}>
+                <Icon className="w-4 h-4" /> {label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="mt-auto p-6 border-t border-zinc-900">
+          <div className="flex gap-4 mb-4">
+            {(['KO', 'EN', 'JP', 'CN'] as AppLanguage[]).map(l => (
+              <button key={l} onClick={() => setLanguage(l)} className={`text-[10px] font-black ${language === l ? 'text-blue-500' : 'text-zinc-700'}`}>{l}</button>
+            ))}
+          </div>
+          <button
+            onClick={() => handleTabChange('settings')}
+            className={`flex items-center gap-2 text-xs font-bold transition-colors ${activeTab === 'settings' ? 'text-blue-500' : 'text-zinc-600 hover:text-white'}`}
+          >
+            <Settings className="w-4 h-4" /> {t.sidebar.settings}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col relative bg-[#050505] overflow-hidden">
+        <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-zinc-900 bg-black/30 backdrop-blur-xl z-30 shrink-0">
+          <div className="flex items-center gap-2 md:gap-4">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-zinc-900 rounded-lg transition-colors">
+              <Menu className="w-5 h-5 text-zinc-500" />
+            </button>
+            <div className="text-sm font-black tracking-tighter uppercase flex items-center gap-2 min-w-0">
+              <span className="text-zinc-600 hidden sm:inline">{t.sidebar.activeProject}:</span>
+              <span className="text-zinc-200 truncate">{currentSession?.title || t.engine.noStory}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 md:gap-4">
+            {currentSession && (
+              <div className="flex gap-2 md:gap-4">
+                <div className="px-3 py-1 bg-zinc-900 rounded-full text-[10px] font-bold text-zinc-500 border border-zinc-800 hidden sm:block">
+                  {currentSession.config.genre}
+                </div>
+                <button
+                  onClick={() => setShowDashboard(!showDashboard)}
+                  className={`px-3 py-1 rounded-full text-[10px] font-black border transition-all ${
+                    showDashboard
+                      ? 'bg-blue-600/20 text-blue-400 border-blue-500/30'
+                      : 'bg-blue-600/10 text-blue-500 border-blue-500/20 hover:bg-blue-600/20'
+                  }`}
+                >
+                  ANS {ENGINE_VERSION}
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {!currentSessionId && !['settings', 'history', 'rulebook'].includes(activeTab) ? (
+              <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                <Ghost className="w-12 h-12 md:w-16 md:h-16 text-zinc-900 mb-6" />
+                <h2 className="text-xl md:text-2xl font-black mb-2 tracking-tighter uppercase">{t.engine.noActiveNarrative}</h2>
+                <p className="text-zinc-600 text-sm mb-8">{t.engine.startPrompt}</p>
+                <button onClick={createNewSession} className="px-8 py-3 md:px-10 md:py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest">{t.sidebar.newProject}</button>
+              </div>
+            ) : (
+              <>
+                {activeTab === 'world' && currentSession && (
+                  <PlanningView
+                    language={language}
+                    config={currentSession.config}
+                    setConfig={setConfig}
+                    onStart={() => setActiveTab('writing')}
+                  />
+                )}
+                {activeTab === 'characters' && currentSession && (
+                  <ResourceView
+                    language={language}
+                    config={currentSession.config}
+                    setConfig={setConfig}
+                  />
+                )}
+                {activeTab === 'settings' && (
+                  <SettingsView
+                    language={language}
+                    onClearAll={clearAllSessions}
+                    onManageApiKey={() => setShowApiKeyModal(true)}
+                  />
+                )}
+                {activeTab === 'rulebook' && (
+                  <RulebookView language={language} />
+                )}
+                {activeTab === 'writing' && currentSession && (
+                  <div className="max-w-4xl mx-auto py-8 px-4 md:py-12 md:px-6 space-y-12">
+                    {/* Engine Status Bar */}
+                    <EngineStatusBar
+                      language={language}
+                      config={currentSession.config}
+                      report={lastReport}
+                      isGenerating={isGenerating}
+                    />
+
+                    {currentSession.messages.length === 0 ? (
+                      <div className="py-20 text-center space-y-4">
+                        <Sparkles className="w-10 h-10 text-blue-900 mx-auto" />
+                        <p className="text-zinc-600 text-sm font-medium">{t.engine.startPrompt}</p>
+                      </div>
+                    ) : (
+                      currentSession.messages.map(msg => (
+                        <ChatMessage key={msg.id} message={msg} language={language} onRegenerate={msg.role === 'assistant' ? handleRegenerate : undefined} />
+                      ))
+                    )}
+                    <div ref={messagesEndRef} className="h-32" />
+                  </div>
+                )}
+                {activeTab === 'history' && (
+                  <div className="p-4 md:p-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+                    {sessions.length === 0 ? (
+                      <div className="col-span-full py-20 text-center text-zinc-600 font-bold uppercase tracking-widest">{t.engine.noArchive}</div>
+                    ) : (
+                      sessions.map(s => (
+                        <div
+                          key={s.id}
+                          onClick={() => { setCurrentSessionId(s.id); setActiveTab('writing'); }}
+                          className={`relative group p-6 bg-zinc-900/30 border border-zinc-800 rounded-3xl cursor-pointer hover:border-blue-500 transition-all ${currentSessionId === s.id ? 'border-blue-600 ring-1 ring-blue-600' : ''}`}
+                        >
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
+                            className="absolute top-4 right-4 p-2 bg-zinc-800/50 rounded-full text-zinc-600 hover:bg-red-500/20 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 z-10"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                          <h4 className="font-black text-sm mb-2 pr-8 truncate">{s.title}</h4>
+                          <div className="flex gap-2">
+                            <span className="text-[9px] font-bold text-zinc-600 uppercase">{s.config.genre}</span>
+                            <span className="text-[9px] font-bold text-zinc-600 uppercase">EP.{s.config.episode}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Engine Dashboard Panel */}
+          {showDashboard && activeTab === 'writing' && currentSession && (
+            <EngineDashboard
+              config={currentSession.config}
+              report={lastReport}
+              isGenerating={isGenerating}
+              language={language}
+            />
+          )}
+        </div>
+
+        {/* Writing Input */}
+        {activeTab === 'writing' && currentSessionId && (
+          <div className="p-4 md:p-6 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent pt-8 md:pt-12 shrink-0">
+            <div className="max-w-4xl mx-auto relative">
+              <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 md:bottom-auto md:-top-10 md:left-4 md:translate-x-0 flex gap-2">
+                <button onClick={() => handleSend(t.engine.nextChapterPrompt)} className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-[10px] font-bold text-zinc-500 hover:text-white transition-all whitespace-nowrap">
+                  {t.engine.nextChapter}
+                </button>
+                <button onClick={() => handleSend(t.engine.plotTwistPrompt)} className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-[10px] font-bold text-zinc-500 hover:text-white transition-all whitespace-nowrap">
+                  {t.engine.plotTwist}
+                </button>
+                {currentSession && currentSession.config.episode < currentSession.config.totalEpisodes && (
+                  <button onClick={handleNextEpisode} className="px-3 py-1.5 bg-blue-600/10 border border-blue-500/20 rounded-full text-[10px] font-bold text-blue-400 hover:bg-blue-600/20 transition-all whitespace-nowrap">
+                    EP.{currentSession.config.episode} → {currentSession.config.episode + 1}
+                  </button>
+                )}
+              </div>
+              <div className="relative bg-[#111] border border-zinc-800 rounded-3xl md:rounded-[2rem] shadow-2xl focus-within:border-blue-500/30 transition-all p-2 pl-4 md:pl-6 flex items-end">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  placeholder={t.writing.inputPlaceholder}
+                  className="flex-1 bg-transparent border-none outline-none py-3 md:py-4 text-sm md:text-[15px] text-zinc-200 placeholder-zinc-800 resize-none max-h-40 custom-scrollbar leading-relaxed"
+                  rows={1}
+                  disabled={isGenerating}
+                />
+                {isGenerating ? (
+                  <button
+                    onClick={handleCancel}
+                    className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center bg-red-600 text-white transition-all shrink-0 hover:bg-red-500"
+                  >
+                    <StopCircle className="w-5 h-5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleSend()}
+                    disabled={!input.trim()}
+                    className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center transition-all shrink-0 ${
+                      input.trim() ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-600'
+                    }`}
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* API Key Modal */}
+      {showApiKeyModal && (
+        <ApiKeyModal
+          language={language}
+          onClose={() => setShowApiKeyModal(false)}
+          onSave={() => {}}
+        />
+      )}
+    </div>
+  );
+}
+
+export default App;
