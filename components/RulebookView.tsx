@@ -19,8 +19,8 @@ function renderHTML(html: string): React.ReactNode {
     const brMatch = remaining.match(/^([\s\S]*?)<br\s*\/?>/);
 
     // Find whichever comes first
-    const strongIdx = strongMatch ? strongMatch.index! + strongMatch[1].length : Infinity;
-    const brIdx = brMatch ? brMatch.index! + brMatch[1].length : Infinity;
+    const strongIdx = strongMatch ? (strongMatch.index ?? 0) + (strongMatch[1]?.length ?? 0) : Infinity;
+    const brIdx = brMatch ? (brMatch.index ?? 0) + (brMatch[1]?.length ?? 0) : Infinity;
 
     if (strongIdx === Infinity && brIdx === Infinity) {
       parts.push(remaining);
