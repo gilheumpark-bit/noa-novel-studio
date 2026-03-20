@@ -39,13 +39,17 @@ export function validateWorldConsistency(
       if (!nameMatch) continue;
       const charName = nameMatch[1];
 
-      // Check if character appears alive in text (not in flashback context)
-      const isFlashback = FLASHBACK_KEYWORDS.some(kw => text.includes(kw));
-      if (isFlashback) continue;
-
       for (const pattern of ALIVE_ACTION_PATTERNS) {
-        const fullPattern = new RegExp(charName + pattern.source);
-        if (fullPattern.test(text)) {
+        const fullPattern = new RegExp(charName + pattern.source, 'g');
+        let match;
+        while ((match = fullPattern.exec(text)) !== null) {
+          // Check if the match is within a flashback context (within 200 chars)
+          const start = Math.max(0, match.index - 200);
+          const end = Math.min(text.length, match.index + match[0].length + 200);
+          const vicinity = text.substring(start, end);
+          const isFlashback = FLASHBACK_KEYWORDS.some(kw => vicinity.includes(kw));
+          if (isFlashback) continue;
+
           issues.push({
             category: 'world_consistency',
             message: `사망한 캐릭터 '${charName}'가 행동하고 있습니다`,

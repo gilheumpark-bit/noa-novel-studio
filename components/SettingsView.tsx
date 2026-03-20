@@ -26,8 +26,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
   const l = LABELS[language];
   const [notificationsOn, setNotificationsOn] = useState(true);
   const [defaultPlatform, setDefaultPlatform] = useState<string>(() => localStorage.getItem('noa_default_platform') || 'MOBILE');
-  const [defaultEpisodes, setDefaultEpisodes] = useState<number>(() => parseInt(localStorage.getItem('noa_default_episodes') || '25'));
-  const [temperature, setTemperature] = useState<number>(() => parseFloat(localStorage.getItem('noa_temperature') || '0.7'));
+  const [defaultEpisodes, setDefaultEpisodes] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('noa_default_episodes') || '25', 10);
+    return Number.isNaN(v) ? 25 : v;
+  });
+  const [temperature, setTemperature] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem('noa_temperature') || '0.7');
+    return Number.isNaN(v) ? 0.7 : v;
+  });
 
   return (
     <div className="max-w-4xl mx-auto p-6 md:p-10 space-y-12 animate-in fade-in duration-500 pb-32">

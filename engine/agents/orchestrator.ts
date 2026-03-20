@@ -219,7 +219,7 @@ export async function runAgentPipeline(
                 durationMs: Math.round(performance.now() - writeStart),
               };
               callbacks.onAgentUpdate({ ...state });
-            }).catch(() => {});
+            }).catch(err => console.warn('[Supervisor checkpoint error]', err));
           }
         }
       },
@@ -294,13 +294,13 @@ export async function runAgentPipeline(
       extractMemories(result.content, baseCtx).then(newEntries => {
         const updated = updateMemorySummary(memoryStore, newEntries, config.episode);
         callbacks.onMemoryStoreUpdate(updated);
-      }).catch(() => {});
+      }).catch(err => console.warn('[Memory extraction error]', err));
     }
 
     if (agentConfig.agents[AgentRole.CHARACTER]) {
       updateCharacterArcs(result.content, baseCtx, arcStore).then(updated => {
         callbacks.onArcStoreUpdate(updated);
-      }).catch(() => {});
+      }).catch(err => console.warn('[Character arc update error]', err));
     }
 
     // ── Done ──

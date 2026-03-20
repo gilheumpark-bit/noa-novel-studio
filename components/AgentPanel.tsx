@@ -225,7 +225,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ language, agentConfig, pipeline
                             {agentState.metadata.alerts && (
                               <div className="space-y-1 mt-1">
                                 <div className="text-[7px] text-zinc-600 font-black">ALERTS</div>
-                                {(agentState.metadata.alerts as any[]).slice(-5).map((alert: any, idx: number) => (
+                                {(Array.isArray(agentState.metadata.alerts) ? agentState.metadata.alerts : []).slice(-5).map((alert: any, idx: number) => (
                                   <div key={idx} className="flex items-start gap-1">
                                     <AlertTriangle className={`w-2.5 h-2.5 shrink-0 mt-0.5 ${
                                       alert.type === 'critical' ? 'text-red-400' :

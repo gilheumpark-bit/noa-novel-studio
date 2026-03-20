@@ -44,8 +44,7 @@ export function extractEmotionalState(
         const end = Math.min(textLen, match.index + keyword.length + 100);
         const vicinity = text.substring(start, end);
 
-        if (vicinity.includes(characterName) || true) {
-          // For POV character, all emotions count
+        if (vicinity.includes(characterName)) {
           count++;
         }
       }
@@ -141,8 +140,8 @@ export function buildEmotionalContext(
   for (const [charName, states] of Object.entries(byChar)) {
     if (states.length === 0) continue;
 
-    // Sort by episode and take last 3
-    const sorted = states.sort((a, b) => a.episode - b.episode).slice(-3);
+    // Sort by episode and take last 3 (copy to avoid mutating input)
+    const sorted = [...states].sort((a, b) => a.episode - b.episode).slice(-3);
 
     // Find top 3 emotions by intensity in the latest state
     const latest = sorted[sorted.length - 1];

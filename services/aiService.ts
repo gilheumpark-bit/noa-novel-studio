@@ -156,7 +156,7 @@ async function generateStreamGemini(
   const { GoogleGenAI } = await import(/* @vite-ignore */ '@google/genai');
   const ai = new GoogleGenAI({ apiKey });
 
-  const temperature = options.temperature ?? parseFloat(localStorage.getItem('noa_temperature') || '0.9');
+  const temperature = options.temperature ?? (parseFloat(localStorage.getItem('noa_temperature') || '0.9') || 0.9);
   const hasHistory = history.filter(m => m.content).length > 0;
   const contents = hasHistory
     ? buildHistoryMessages(history, userPrompt, 'gemini')
@@ -215,7 +215,12 @@ async function generateJSONGemini(
     }
   });
 
-  return JSON.parse(response.text || "[]");
+  try {
+    return JSON.parse(response.text || "[]");
+  } catch {
+    console.warn('[Gemini] Failed to parse JSON response, returning empty array');
+    return [];
+  }
 }
 
 // ============================================================
@@ -231,7 +236,7 @@ async function generateStreamOpenAI(
   onChunk: (text: string) => void,
   options: GenerateOptions
 ): Promise<string> {
-  const temperature = options.temperature ?? parseFloat(localStorage.getItem('noa_temperature') || '0.9');
+  const temperature = options.temperature ?? (parseFloat(localStorage.getItem('noa_temperature') || '0.9') || 0.9);
   const hasHistory = history.filter(m => m.content).length > 0;
 
   const messages: Array<{ role: string; content: string }> = [
@@ -329,8 +334,13 @@ async function generateJSONOpenAI(
   if (!response.ok) throw new Error(`OpenAI API error: ${response.status}`);
   const data = await response.json();
   const text = data.choices?.[0]?.message?.content || '[]';
-  const parsed = JSON.parse(text);
-  return Array.isArray(parsed) ? parsed : parsed.characters || [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : parsed.characters || [];
+  } catch {
+    console.warn('[OpenAI] Failed to parse JSON response, returning empty array');
+    return [];
+  }
 }
 
 // ============================================================
@@ -346,7 +356,7 @@ async function generateStreamClaude(
   onChunk: (text: string) => void,
   options: GenerateOptions
 ): Promise<string> {
-  const temperature = options.temperature ?? parseFloat(localStorage.getItem('noa_temperature') || '0.9');
+  const temperature = options.temperature ?? (parseFloat(localStorage.getItem('noa_temperature') || '0.9') || 0.9);
   const hasHistory = history.filter(m => m.content).length > 0;
 
   const messages: Array<{ role: string; content: string }> = [];
@@ -446,7 +456,13 @@ async function generateJSONClaude(
   const data = await response.json();
   const text = data.content?.[0]?.text || '[]';
   const jsonMatch = text.match(/\[[\s\S]*\]/);
-  return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+  if (!jsonMatch) return [];
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    console.warn('[Claude] Failed to parse JSON response, returning empty array');
+    return [];
+  }
 }
 
 // ============================================================

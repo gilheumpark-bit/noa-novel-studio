@@ -85,8 +85,14 @@ function App() {
     return safeParseSessions(localStorage.getItem(STORAGE_KEY_SESSIONS));
   });
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
-    const parsed = safeParseSessions(localStorage.getItem(STORAGE_KEY_SESSIONS));
-    return parsed.length > 0 ? parsed[0].id : null;
+    const raw = localStorage.getItem(STORAGE_KEY_SESSIONS);
+    if (!raw) return null;
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) && arr.length > 0 ? arr[0].id : null;
+    } catch {
+      return null;
+    }
   });
 
   const [activeTab, setActiveTab] = useState<AppTab>('world');
@@ -377,7 +383,7 @@ function App() {
     if (isGenerating || !currentSessionId || !currentSession) return;
 
     const msgIndex = currentSession.messages.findIndex(m => m.id === assistantMsgId);
-    if (msgIndex <= 0) return;
+    if (msgIndex < 1) return;
     const userMsg = currentSession.messages[msgIndex - 1];
     if (userMsg.role !== 'user') return;
 

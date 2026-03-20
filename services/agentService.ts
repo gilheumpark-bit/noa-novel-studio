@@ -98,8 +98,13 @@ async function callOpenAIAgent(
     throw new Error(`OpenAI Agent Error (${response.status}): ${err}`);
   }
 
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  try {
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '';
+  } catch {
+    console.warn('[OpenAI Agent] Failed to parse JSON response');
+    return '';
+  }
 }
 
 // ============================================================
@@ -135,6 +140,11 @@ async function callClaudeAgent(
     throw new Error(`Claude Agent Error (${response.status}): ${err}`);
   }
 
-  const data = await response.json();
-  return data.content?.[0]?.text || '';
+  try {
+    const data = await response.json();
+    return data.content?.[0]?.text || '';
+  } catch {
+    console.warn('[Claude Agent] Failed to parse JSON response');
+    return '';
+  }
 }
