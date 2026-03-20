@@ -153,7 +153,13 @@ ${generatedText.slice(0, 3000)}
     const jsonMatch = extractFirstJSON(response, '[');
     if (!jsonMatch) return [];
 
-    const items: any[] = JSON.parse(jsonMatch);
+    let items: any[];
+    try {
+      items = JSON.parse(jsonMatch);
+    } catch {
+      console.warn('[MemoryAgent] Failed to parse extracted JSON');
+      return [];
+    }
     return items
       .filter(item => item.content && item.importance >= 5)
       .map(item => ({

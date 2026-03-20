@@ -200,7 +200,13 @@ ${currentArcs || '초기 상태'}
     const jsonMatch = extractFirstJSON(response, '[');
     if (!jsonMatch) return currentStore;
 
-    const items: any[] = JSON.parse(jsonMatch);
+    let items: any[];
+    try {
+      items = JSON.parse(jsonMatch);
+    } catch {
+      console.warn('[CharacterAgent] Failed to parse extracted JSON');
+      return currentStore;
+    }
     const newArcs: CharacterArcState[] = items
       .filter(item => item.characterName)
       .map(item => ({

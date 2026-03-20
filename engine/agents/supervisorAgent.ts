@@ -361,7 +361,13 @@ ${foreshadowings || '없음'}
     // Parse response
     const jsonMatch = extractFirstJSON(response);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch);
+      let parsed: any;
+      try {
+        parsed = JSON.parse(jsonMatch);
+      } catch {
+        console.warn('[Supervisor] Failed to parse checkpoint JSON');
+        return { alerts: [], directive: '', eosEstimate: localEos, tensionLevel: localTension, shouldIntervene: false };
+      }
       const alerts: SupervisorAlert[] = (parsed.issues || []).map((issue: any, i: number) => ({
         type: (['critical', 'warning', 'info'].includes(issue.type) ? issue.type : 'warning') as SupervisorAlert['type'],
         category: 'checkpoint',
