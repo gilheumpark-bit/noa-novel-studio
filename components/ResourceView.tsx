@@ -1,14 +1,14 @@
 
 import React, { useState, useMemo } from 'react';
-import { Character, StoryConfig, AppLanguage } from '../types';
+import { Character, StoryConfig, AppLanguage, SetConfigFn } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { UserPlus, Trash2, Fingerprint, Sparkles, Loader2, Users, ChevronLeft, ChevronRight, UserCircle, Briefcase, ScrollText, Zap } from 'lucide-react';
-import { generateCharacters } from '../services/geminiService';
+import { generateCharacters } from '../services/aiService';
 
 interface ResourceViewProps {
   language: AppLanguage;
   config: StoryConfig;
-  setConfig: React.Dispatch<React.SetStateAction<StoryConfig>>;
+  setConfig: SetConfigFn;
 }
 
 const ROLE_KEYS = ['hero', 'villain', 'ally', 'extra'] as const;

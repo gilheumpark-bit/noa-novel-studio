@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus, Settings, Send,
   Sparkles, Menu, Globe, UserCircle,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   Message, StoryConfig, Genre,
-  AppLanguage, AppTab, PlatformType
+  AppLanguage, AppTab, PlatformType, SetConfigFn
 } from './types';
 import { TRANSLATIONS, ENGINE_VERSION } from './constants';
 import { EngineReport } from './engine/types';
@@ -19,7 +19,7 @@ import RulebookView from './components/RulebookView';
 import EngineDashboard from './components/EngineDashboard';
 import EngineStatusBar from './components/EngineStatusBar';
 import ApiKeyModal from './components/ApiKeyModal';
-import { generateStoryStream } from './services/geminiService';
+import { generateStoryStream } from './services/aiService';
 
 const STORAGE_KEY_SESSIONS = 'noa_chat_sessions_v2';
 
@@ -44,14 +44,21 @@ const INITIAL_CONFIG: StoryConfig = {
   platform: PlatformType.MOBILE,
 };
 
+function safeParseSessions(raw: string | null): ChatSession[] {
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
 function App() {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
-    return saved ? JSON.parse(saved) : [];
+    return safeParseSessions(localStorage.getItem(STORAGE_KEY_SESSIONS));
   });
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
-    const parsed = saved ? JSON.parse(saved) : [];
+    const parsed = safeParseSessions(localStorage.getItem(STORAGE_KEY_SESSIONS));
     return parsed.length > 0 ? parsed[0].id : null;
   });
 
@@ -63,7 +70,9 @@ function App() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [lastReport, setLastReport] = useState<EngineReport | null>(null);
+  const [, forceUpdate] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentSession = sessions.find(s => s.id === currentSessionId) || null;
@@ -77,9 +86,24 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Debounced localStorage write (2 second delay)
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+    }, 2000);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
   }, [sessions]);
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => {
+      localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'writing') {
@@ -90,10 +114,10 @@ function App() {
   const createNewSession = () => {
     const sessionTitles: Record<AppLanguage, string> = { KO: "새로운 소설", EN: "New Story", JP: "新しい小説", CN: "新小说" };
     const newSession: ChatSession = {
-      id: `session-${Date.now()}`,
+      id: `session-${crypto.randomUUID()}`,
       title: sessionTitles[language],
       messages: [],
-      config: { ...INITIAL_CONFIG },
+      config: structuredClone(INITIAL_CONFIG),
       lastUpdate: Date.now()
     };
     setSessions([newSession, ...sessions]);
@@ -131,41 +155,52 @@ function App() {
     }
   };
 
-  const updateCurrentSession = (updates: Partial<ChatSession>) => {
+  const updateCurrentSession = useCallback((updates: Partial<ChatSession>) => {
     if (!currentSessionId) return;
     setSessions(prev => prev.map(s =>
       s.id === currentSessionId ? { ...s, ...updates, lastUpdate: Date.now() } : s
     ));
-  };
+  }, [currentSessionId]);
 
-  const setConfig = (newConfig: any) => {
+  const setConfig: SetConfigFn = useCallback((newConfig) => {
+    if (!currentSession) return;
     if (typeof newConfig === 'function') {
-      updateCurrentSession({ config: newConfig(currentSession?.config) });
+      updateCurrentSession({ config: newConfig(currentSession.config) });
     } else {
       updateCurrentSession({ config: newConfig });
     }
-  };
+  }, [currentSession, updateCurrentSession]);
 
   const handleCancel = () => {
     abortControllerRef.current?.abort();
     setIsGenerating(false);
   };
 
+  const getErrorMessage = (error: any): string => {
+    const msg = error?.message || String(error);
+    const errorMessages: Record<AppLanguage, string> = {
+      KO: `생성 중 오류가 발생했습니다: ${msg}`,
+      EN: `Generation error: ${msg}`,
+      JP: `生成エラー: ${msg}`,
+      CN: `生成错误: ${msg}`,
+    };
+    return errorMessages[language];
+  };
+
   const handleSend = async (customPrompt?: string) => {
     const text = customPrompt || input;
-    if (!text.trim() || isGenerating || !currentSessionId) return;
+    if (!text.trim() || isGenerating || !currentSessionId || !currentSession) return;
 
-    const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', content: text, timestamp: Date.now() };
-    const aiMsgId = `a-${Date.now()}`;
+    const userMsg: Message = { id: `u-${crypto.randomUUID()}`, role: 'user', content: text, timestamp: Date.now() };
+    const aiMsgId = `a-${crypto.randomUUID()}`;
     const initialAiMsg: Message = { id: aiMsgId, role: 'assistant', content: '', timestamp: Date.now() };
 
-    // Capture existing messages BEFORE adding new ones (for history)
-    const existingMessages = currentSession?.messages || [];
+    const existingMessages = currentSession.messages;
 
     const updatedMessages = [...existingMessages, userMsg, initialAiMsg];
     updateCurrentSession({
       messages: updatedMessages,
-      title: existingMessages.length === 0 ? text.substring(0, 15) : currentSession?.title
+      title: existingMessages.length === 0 ? text.substring(0, 15) : currentSession.title
     });
     setInput('');
     setIsGenerating(true);
@@ -176,7 +211,7 @@ function App() {
     try {
       let fullContent = '';
       const result = await generateStoryStream(
-        currentSession!.config,
+        currentSession.config,
         text,
         (chunk) => {
           fullContent += chunk;
@@ -191,12 +226,11 @@ function App() {
         {
           language,
           signal: controller.signal,
-          platform: currentSession!.config.platform,
+          platform: currentSession.config.platform,
           history: existingMessages,
         }
       );
 
-      // Store engine report on the message meta
       setLastReport(result.report);
       setSessions(prev => prev.map(s => {
         if (s.id === currentSessionId) {
@@ -212,6 +246,16 @@ function App() {
     } catch (error: any) {
       if (error.name !== 'AbortError') {
         console.error(error);
+        const errorMsg = getErrorMessage(error);
+        setSessions(prev => prev.map(s => {
+          if (s.id === currentSessionId) {
+            const msgs = s.messages.map(m =>
+              m.id === aiMsgId ? { ...m, content: `⚠️ ${errorMsg}` } : m
+            );
+            return { ...s, messages: msgs };
+          }
+          return s;
+        }));
       }
     } finally {
       setIsGenerating(false);
@@ -222,16 +266,13 @@ function App() {
   const handleRegenerate = async (assistantMsgId: string) => {
     if (isGenerating || !currentSessionId || !currentSession) return;
 
-    // Find the user message right before this assistant message
     const msgIndex = currentSession.messages.findIndex(m => m.id === assistantMsgId);
     if (msgIndex <= 0) return;
     const userMsg = currentSession.messages[msgIndex - 1];
     if (userMsg.role !== 'user') return;
 
-    // History = everything before the user message
     const historyMessages = currentSession.messages.slice(0, msgIndex - 1);
 
-    // Clear the assistant message content
     setSessions(prev => prev.map(s => {
       if (s.id === currentSessionId) {
         const msgs = s.messages.map(m => m.id === assistantMsgId ? { ...m, content: '', meta: undefined } : m);
@@ -282,6 +323,16 @@ function App() {
     } catch (error: any) {
       if (error.name !== 'AbortError') {
         console.error(error);
+        const errorMsg = getErrorMessage(error);
+        setSessions(prev => prev.map(s => {
+          if (s.id === currentSessionId) {
+            const msgs = s.messages.map(m =>
+              m.id === assistantMsgId ? { ...m, content: `⚠️ ${errorMsg}` } : m
+            );
+            return { ...s, messages: msgs };
+          }
+          return s;
+        }));
       }
     } finally {
       setIsGenerating(false);
@@ -293,6 +344,10 @@ function App() {
     if (!currentSession) return;
     const nextEp = Math.min(currentSession.config.episode + 1, currentSession.config.totalEpisodes);
     setConfig({ ...currentSession.config, episode: nextEp });
+  };
+
+  const handleApiKeySaved = () => {
+    forceUpdate(n => n + 1);
   };
 
   return (
@@ -411,7 +466,6 @@ function App() {
                 )}
                 {activeTab === 'writing' && currentSession && (
                   <div className="max-w-4xl mx-auto py-8 px-4 md:py-12 md:px-6 space-y-12">
-                    {/* Engine Status Bar */}
                     <EngineStatusBar
                       language={language}
                       config={currentSession.config}
@@ -463,7 +517,6 @@ function App() {
             )}
           </div>
 
-          {/* Engine Dashboard Panel */}
           {showDashboard && activeTab === 'writing' && currentSession && (
             <EngineDashboard
               config={currentSession.config}
@@ -530,7 +583,7 @@ function App() {
         <ApiKeyModal
           language={language}
           onClose={() => setShowApiKeyModal(false)}
-          onSave={() => {}}
+          onSave={handleApiKeySaved}
         />
       )}
     </div>

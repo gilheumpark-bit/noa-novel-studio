@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Activity, Zap, Database, ShieldCheck, AlertCircle, Cpu, BarChart3 } from 'lucide-react';
 import { StoryConfig, AppLanguage } from '../types';
 import { EngineReport, PlatformType } from '../engine/types';
@@ -15,7 +15,7 @@ interface EngineDashboardProps {
 
 const EngineDashboard: React.FC<EngineDashboardProps> = ({ config, report, isGenerating, language }) => {
   const totalEpisodes = config.totalEpisodes ?? 25;
-  const tensionData = generateTensionCurveData(totalEpisodes, config.genre);
+  const tensionData = useMemo(() => generateTensionCurveData(totalEpisodes, config.genre), [totalEpisodes, config.genre]);
 
   return (
     <div className="h-full bg-zinc-950 border-l border-zinc-800 flex flex-col w-80 text-xs font-mono overflow-y-auto custom-scrollbar">

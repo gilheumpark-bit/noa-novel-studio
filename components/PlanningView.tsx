@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { StoryConfig, Genre, AppLanguage, PlatformType } from '../types';
+import React, { useMemo } from 'react';
+import { StoryConfig, Genre, AppLanguage, PlatformType, SetConfigFn } from '../types';
 import { TRANSLATIONS, GENRE_LABELS } from '../constants';
 import { Sparkles, BarChart3, Wand2, Monitor, Smartphone } from 'lucide-react';
 import { generateTensionCurveData } from '../engine/models';
@@ -8,7 +8,7 @@ import { generateTensionCurveData } from '../engine/models';
 interface PlanningViewProps {
   language: AppLanguage;
   config: StoryConfig;
-  setConfig: React.Dispatch<React.SetStateAction<StoryConfig>>;
+  setConfig: SetConfigFn;
   onStart: () => void;
 }
 
@@ -17,7 +17,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
   const te = TRANSLATIONS[language].engine;
 
   const totalEpisodes = config.totalEpisodes ?? 25;
-  const tensionData = generateTensionCurveData(totalEpisodes, config.genre);
+  const tensionData = useMemo(() => generateTensionCurveData(totalEpisodes, config.genre), [totalEpisodes, config.genre]);
 
   const injectDemoData = () => {
     setConfig((prev: StoryConfig) => ({
@@ -79,7 +79,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
               max="100"
               className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-sm font-bold focus:border-blue-600 outline-none transition-all"
               value={totalEpisodes}
-              onChange={e => setConfig({ ...config, totalEpisodes: parseInt(e.target.value) || 25 })}
+              onChange={e => { const v = parseInt(e.target.value); setConfig({ ...config, totalEpisodes: Number.isNaN(v) || v < 1 ? 25 : v }); }}
             />
           </div>
           <div className="space-y-2">
@@ -197,14 +197,14 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
                 <span>{t.minDensity}</span>
                 <span>{config.guardrails.min}{language === 'KO' ? '자' : ' chars'}</span>
               </div>
-              <input type="range" min="1000" max="10000" step="500" className="w-full accent-blue-600 h-1.5 bg-zinc-800 rounded-full appearance-none" value={config.guardrails.min} onChange={e => setConfig({...config, guardrails: {...config.guardrails, min: parseInt(e.target.value)}})} />
+              <input type="range" min="1000" max="10000" step="500" className="w-full accent-blue-600 h-1.5 bg-zinc-800 rounded-full appearance-none" value={config.guardrails.min} onChange={e => { const v = parseInt(e.target.value); setConfig({...config, guardrails: {...config.guardrails, min: v, max: Math.max(v, config.guardrails.max)}}); }} />
             </div>
             <div className="space-y-4">
               <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase">
                 <span>{t.maxCapacity}</span>
                 <span>{config.guardrails.max}{language === 'KO' ? '자' : ' chars'}</span>
               </div>
-              <input type="range" min="2000" max="15000" step="500" className="w-full accent-blue-600 h-1.5 bg-zinc-800 rounded-full appearance-none" value={config.guardrails.max} onChange={e => setConfig({...config, guardrails: {...config.guardrails, max: parseInt(e.target.value)}})} />
+              <input type="range" min="2000" max="15000" step="500" className="w-full accent-blue-600 h-1.5 bg-zinc-800 rounded-full appearance-none" value={config.guardrails.max} onChange={e => { const v = parseInt(e.target.value); setConfig({...config, guardrails: {...config.guardrails, max: v, min: Math.min(v, config.guardrails.min)}}); }} />
             </div>
           </div>
         </div>

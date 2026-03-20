@@ -8,6 +8,39 @@ interface RulebookViewProps {
   language: AppLanguage;
 }
 
+/** Safely render HTML strings like "<strong>text</strong>" and "<br/>" as React elements */
+function renderHTML(html: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let remaining = html;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    const strongMatch = remaining.match(/^([\s\S]*?)<strong>([\s\S]*?)<\/strong>/);
+    const brMatch = remaining.match(/^([\s\S]*?)<br\s*\/?>/);
+
+    // Find whichever comes first
+    const strongIdx = strongMatch ? strongMatch.index! + strongMatch[1].length : Infinity;
+    const brIdx = brMatch ? brMatch.index! + brMatch[1].length : Infinity;
+
+    if (strongIdx === Infinity && brIdx === Infinity) {
+      parts.push(remaining);
+      break;
+    }
+
+    if (strongIdx <= brIdx && strongMatch) {
+      if (strongMatch[1]) parts.push(strongMatch[1]);
+      parts.push(<strong key={key++} className="text-zinc-200 font-bold">{strongMatch[2]}</strong>);
+      remaining = remaining.slice(strongMatch[0].length);
+    } else if (brMatch) {
+      if (brMatch[1]) parts.push(brMatch[1]);
+      parts.push(<br key={key++} />);
+      remaining = remaining.slice(brMatch[0].length);
+    }
+  }
+
+  return <>{parts}</>;
+}
+
 const RulebookView: React.FC<RulebookViewProps> = ({ language }) => {
   const t = TRANSLATIONS[language]?.rulebook || TRANSLATIONS['KO'].rulebook;
 
@@ -22,7 +55,7 @@ const RulebookView: React.FC<RulebookViewProps> = ({ language }) => {
           <p className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase">{t.subtitle}</p>
         </div>
       </div>
-      
+
       <div className="prose prose-sm sm:prose-base prose-invert max-w-none text-zinc-400
         prose-h2:text-lg md:prose-h2:text-xl prose-h2:text-white prose-h2:font-black prose-h2:tracking-tighter prose-h2:uppercase prose-h2:border-b prose-h2:border-zinc-800 prose-h2:pb-3
         prose-h3:text-sm prose-h3:text-blue-400 prose-h3:font-black prose-h3:tracking-widest prose-h3:uppercase
@@ -46,7 +79,7 @@ const RulebookView: React.FC<RulebookViewProps> = ({ language }) => {
                 <li>{t.coreDefinition.li2}</li>
             </ul>
         </blockquote>
-        
+
         <h2>{t.whoShouldRead.title}</h2>
         <h3>{t.whoShouldRead.recommended.title}</h3>
         <ul>
@@ -56,25 +89,25 @@ const RulebookView: React.FC<RulebookViewProps> = ({ language }) => {
         <ul>
             {t.whoShouldRead.notRecommended.items.map((item: string, i: number) => <li key={`not-rec-${i}`}>{item}</li>)}
         </ul>
-        
+
         <h2>{t.quickStart.title}</h2>
         <h3>{t.quickStart.nonIntervention.title}</h3>
         <p>{t.quickStart.nonIntervention.p1}</p>
-        <p dangerouslySetInnerHTML={{ __html: t.quickStart.nonIntervention.p2 }} />
-        
+        <p>{renderHTML(t.quickStart.nonIntervention.p2)}</p>
+
         <h3>{t.quickStart.equivalence.title}</h3>
         <p>{t.quickStart.equivalence.p1}</p>
-        <p dangerouslySetInnerHTML={{ __html: t.quickStart.equivalence.listTitle }} />
+        <p>{renderHTML(t.quickStart.equivalence.listTitle)}</p>
         <ul>
             {t.quickStart.equivalence.items.map((item: string, i: number) => <li key={`equiv-${i}`}>{item}</li>)}
         </ul>
 
         <h3>{t.quickStart.explainability.title}</h3>
         <p>{t.quickStart.explainability.p1}</p>
-        <p dangerouslySetInnerHTML={{ __html: t.quickStart.explainability.p2 }} />
+        <p>{renderHTML(t.quickStart.explainability.p2)}</p>
 
         <hr/>
-        
+
         <h2>{t.coreSentences.title}</h2>
         <blockquote>{t.coreSentences.q1}</blockquote>
         <blockquote>{t.coreSentences.q2}</blockquote>
@@ -84,7 +117,7 @@ const RulebookView: React.FC<RulebookViewProps> = ({ language }) => {
         <h3>{t.howToUse.step1.title}</h3>
         <p>{t.howToUse.step1.p1}</p>
         <ul>
-            {t.howToUse.step1.items.map((item: string, i: number) => <li key={`s1-${i}`} dangerouslySetInnerHTML={{ __html: item }} />)}
+            {t.howToUse.step1.items.map((item: string, i: number) => <li key={`s1-${i}`}>{renderHTML(item)}</li>)}
         </ul>
         <p>{t.howToUse.step1.p2}</p>
 
@@ -102,10 +135,10 @@ const RulebookView: React.FC<RulebookViewProps> = ({ language }) => {
         <h2>{t.keyConcepts.title}</h2>
         <h3>{t.keyConcepts.worldStability.title}</h3>
         <p>{t.keyConcepts.worldStability.p1}</p>
-        
+
         <h3>{t.keyConcepts.ehTiers.title}</h3>
         <ul>
-          {t.keyConcepts.ehTiers.items.map((item: string, i: number) => <li key={`tier-${i}`} dangerouslySetInnerHTML={{ __html: item }} />)}
+          {t.keyConcepts.ehTiers.items.map((item: string, i: number) => <li key={`tier-${i}`}>{renderHTML(item)}</li>)}
         </ul>
 
         <h3>{t.keyConcepts.logFormat.title}</h3>
@@ -113,8 +146,8 @@ const RulebookView: React.FC<RulebookViewProps> = ({ language }) => {
 
         <h2>{t.example.title}</h2>
         <h3>{t.example.scenario.title}</h3>
-        <p dangerouslySetInnerHTML={{ __html: t.example.scenario.p1 }} />
-        <p dangerouslySetInnerHTML={{ __html: t.example.scenario.p2 }} />
+        <p>{renderHTML(t.example.scenario.p1)}</p>
+        <p>{renderHTML(t.example.scenario.p2)}</p>
         <ul>
             {t.example.scenario.items.map((item: string, i: number) => <li key={`ex-${i}`}>{item}</li>)}
         </ul>

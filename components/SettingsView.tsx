@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { AppLanguage, PlatformType } from '../types';
 import { ENGINE_VERSION } from '../constants';
+import { getStoredProvider, getStoredModel, PROVIDER_LABELS } from '../services/aiService';
 import {
   User, Shield, Cpu, Trash2,
   ChevronRight, Zap, Bell, Key, Monitor, Smartphone, Hash, Thermometer
@@ -66,8 +67,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
               <span className="text-xs font-black text-blue-400">ANS {ENGINE_VERSION}</span>
             </div>
             <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-zinc-800">
+              <span className="text-xs text-zinc-400">{isKO ? "AI 프로바이더" : "AI Provider"}</span>
+              <span className="text-xs font-black text-white">{PROVIDER_LABELS[getStoredProvider()]}</span>
+            </div>
+            <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-zinc-800">
               <span className="text-xs text-zinc-400">{isKO ? "AI 모델" : "AI Model"}</span>
-              <span className="text-xs font-black text-white">Gemini 2.5 Flash</span>
+              <span className="text-xs font-black text-white truncate max-w-[200px]">{getStoredModel(getStoredProvider())}</span>
             </div>
             <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-zinc-800">
               <span className="text-xs text-zinc-400">{isKO ? "지연 시간" : "Latency"}</span>
@@ -91,7 +96,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
                 <div className="p-3 bg-zinc-900 rounded-2xl"><Key className="w-5 h-5 text-zinc-500" /></div>
                 <div>
                   <div className="text-sm font-bold">{isKO ? "API 키 관리" : "API Key Management"}</div>
-                  <div className="text-[11px] text-zinc-500 hidden sm:block">{isKO ? "Gemini API 키를 설정하고 관리합니다." : "Configure and manage your Gemini API key."}</div>
+                  <div className="text-[11px] text-zinc-500 hidden sm:block">{isKO ? "AI API 키를 설정하고 관리합니다." : "Configure and manage your AI API keys."}</div>
                 </div>
               </div>
               <div className="text-[10px] font-black text-blue-500 uppercase shrink-0 ml-2">

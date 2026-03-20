@@ -1,7 +1,7 @@
 import { StoryConfig, AppLanguage } from '../types';
 import { EngineReport, PlatformType, getActFromEpisode } from './types';
 import { tensionCurve, predictEngagement } from './models';
-import { validateAITone, validateGeneratedContent } from './validator';
+import { validateGeneratedContent } from './validator';
 import { calculateByteSize, getTargetByteRange } from './serialization';
 
 // ============================================================
@@ -19,6 +19,10 @@ const SENSORY_KEYWORDS_KO = [
   '거친', '달콤', '쓴', '축축', '바람', '울림', '진동',
 ];
 
+// Pre-compiled regexes for performance
+const EMOTION_REGEXES = EMOTION_KEYWORDS_KO.map(kw => new RegExp(kw, 'g'));
+const SENSORY_REGEXES = SENSORY_KEYWORDS_KO.map(kw => new RegExp(kw, 'g'));
+
 export function calculateEOSScore(text: string): number {
   if (!text || text.length < 100) return 0;
 
@@ -26,15 +30,17 @@ export function calculateEOSScore(text: string): number {
 
   // Emotional keyword density
   let emotionCount = 0;
-  for (const kw of EMOTION_KEYWORDS_KO) {
-    const matches = text.match(new RegExp(kw, 'g'));
+  for (const re of EMOTION_REGEXES) {
+    re.lastIndex = 0;
+    const matches = text.match(re);
     if (matches) emotionCount += matches.length;
   }
 
   // Sensory description density
   let sensoryCount = 0;
-  for (const kw of SENSORY_KEYWORDS_KO) {
-    const matches = text.match(new RegExp(kw, 'g'));
+  for (const re of SENSORY_REGEXES) {
+    re.lastIndex = 0;
+    const matches = text.match(re);
     if (matches) sensoryCount += matches.length;
   }
 
@@ -95,7 +101,8 @@ export function analyzeMetrics(
   const tensionKeywords = ['위험', '급', '갑자기', '폭발', '비명', '긴장', '전투', '충돌', 'danger', 'explosion', 'scream'];
   let tensionHits = 0;
   for (const kw of tensionKeywords) {
-    tensionHits += (text.match(new RegExp(kw, 'gi')) || []).length;
+    const re = new RegExp(kw, 'gi');
+    tensionHits += (text.match(re) || []).length;
   }
   const shortSentenceRatio = sentences.filter(s => s.trim().length < 20).length / sentenceCount;
   const tension = Math.min(100, Math.round(
@@ -146,8 +153,8 @@ export function generateEngineReport(
 
   const metrics = analyzeMetrics(text, config);
   const eosScore = calculateEOSScore(text);
-  const aiTone = validateAITone(text);
-  const { fixes, issues } = validateGeneratedContent(text, language);
+  // validateGeneratedContent already calls validateAITone internally for KO
+  const { fixes, issues, aiToneScore } = validateGeneratedContent(text, language);
 
   const byteSize = calculateByteSize(text);
   const targetRange = getTargetByteRange(platform);
@@ -164,14 +171,14 @@ export function generateEngineReport(
     tensionTarget,
     actPosition,
     metrics,
-    aiTonePercent: aiTone.score,
+    aiTonePercent: aiToneScore,
     serialization: {
       platform,
       byteSize,
       targetRange,
       withinRange: byteSize >= targetRange.min && byteSize <= targetRange.max,
     },
-    fixes: [...aiTone.fixes, ...fixes],
+    fixes,
     issues,
     processingTimeMs,
   };

@@ -1,5 +1,15 @@
 import { EngineReport, PlatformType, EpisodeState } from './engine/types';
 
+export type AIProvider = 'gemini' | 'openai' | 'claude';
+
+export interface AIProviderConfig {
+  provider: AIProvider;
+  apiKey: string;
+  model: string;
+}
+
+export type SetConfigFn = (config: StoryConfig | ((prev: StoryConfig) => StoryConfig)) => void;
+
 export enum Genre {
   SF = "SF",
   FANTASY = "FANTASY",

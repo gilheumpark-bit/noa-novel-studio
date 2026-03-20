@@ -216,13 +216,15 @@ export function validateStatic(text: string): { fixes: FixRecord[]; issues: Vali
 export function validateGeneratedContent(
   text: string,
   language: AppLanguage
-): { fixes: FixRecord[]; issues: ValidationIssue[] } {
+): { fixes: FixRecord[]; issues: ValidationIssue[]; aiToneScore: number } {
   const allFixes: FixRecord[] = [];
   const allIssues: ValidationIssue[] = [];
+  let aiToneScore = 0;
 
   // Korean-specific validators
   if (language === 'KO') {
     const aiTone = validateAITone(text);
+    aiToneScore = aiTone.score;
     allFixes.push(...aiTone.fixes);
 
     const quality = validateQuality(text);
@@ -235,5 +237,5 @@ export function validateGeneratedContent(
   allFixes.push(...staticResult.fixes);
   allIssues.push(...staticResult.issues);
 
-  return { fixes: allFixes, issues: allIssues };
+  return { fixes: allFixes, issues: allIssues, aiToneScore };
 }
