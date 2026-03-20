@@ -32,12 +32,17 @@ export function buildAgentEnhancedPrompt(
     .filter(d => d.length > 0)
     .join('\n\n');
 
-  const enhancedSystem = directiveBlock
-    ? baseSystem.replace(
-        '[SERIALIZATION CONSTRAINTS]',
-        `${directiveBlock}\n\n[SERIALIZATION CONSTRAINTS]`
-      )
-    : baseSystem;
+  let enhancedSystem = baseSystem;
+  if (directiveBlock) {
+    const marker = '[SERIALIZATION CONSTRAINTS]';
+    if (baseSystem.includes(marker)) {
+      enhancedSystem = baseSystem.replace(marker, `${directiveBlock}\n\n${marker}`);
+    } else {
+      // Fallback: prepend directives if marker not found
+      enhancedSystem = `${directiveBlock}\n\n${baseSystem}`;
+      console.warn('[WritingAgent] Template marker not found, prepending directives');
+    }
+  }
 
   return {
     systemInstruction: enhancedSystem,

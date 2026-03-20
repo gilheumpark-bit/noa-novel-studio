@@ -118,8 +118,8 @@ ${characterDNA}
 
 ${ans95Sections ? `${ans95Sections}\n\n` : ''}[SERIALIZATION CONSTRAINTS]
 - Platform: ${platform}
-- Target character count: ${config.guardrails.min}자 ~ ${config.guardrails.max}자 (약 ${(byteTarget.min / 1024).toFixed(1)}KB ~ ${(byteTarget.max / 1024).toFixed(1)}KB)
-- 반드시 최소 ${config.guardrails.min}자 이상, 최대 ${config.guardrails.max}자 이하로 작성하십시오.
+- Target character count: ${config.guardrails?.min ?? Math.round(byteTarget.min / 3)}자 ~ ${config.guardrails?.max ?? Math.round(byteTarget.max / 3)}자 (약 ${(byteTarget.min / 1024).toFixed(1)}KB ~ ${(byteTarget.max / 1024).toFixed(1)}KB)
+- 반드시 최소 ${config.guardrails?.min ?? Math.round(byteTarget.min / 3)}자 이상, 최대 ${config.guardrails?.max ?? Math.round(byteTarget.max / 3)}자 이하로 작성하십시오.
 - 서사를 4개 파트로 나누어 출력하되, 목표 글자 수 범위 내에서 마무리하십시오.
 
 [QUALITY DIRECTIVES]

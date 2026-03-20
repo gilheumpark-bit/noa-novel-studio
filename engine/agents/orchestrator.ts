@@ -417,6 +417,8 @@ async function generateStoryStreamWithCustomPrompt(
       fullContent = await readSSEStream(response, onChunk, signal, 'claude');
       break;
     }
+    default:
+      throw new Error(`Unsupported provider: ${provider}`);
   }
 
   const { content, report } = postProcessResponse(fullContent, config, language, platform);
@@ -463,42 +465,51 @@ async function readSSEStream(
   signal?: AbortSignal,
   provider: 'openai' | 'claude' = 'openai',
 ): Promise<string> {
-  const reader = response.body!.getReader();
+  if (!response.body) {
+    throw new Error(`${provider} API returned empty response body`);
+  }
+
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let fullContent = '';
   let buffer = '';
+  let streamDone = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  try {
+    while (!streamDone) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith('data: ')) continue;
-      const data = trimmed.slice(6);
-      if (data === '[DONE]') break;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') { streamDone = true; break; }
 
-      try {
-        const parsed = JSON.parse(data);
-        let delta: string | undefined;
-        if (provider === 'openai') {
-          delta = parsed.choices?.[0]?.delta?.content;
-        } else {
-          if (parsed.type === 'content_block_delta') {
-            delta = parsed.delta?.text;
+        try {
+          const parsed = JSON.parse(data);
+          let delta: string | undefined;
+          if (provider === 'openai') {
+            delta = parsed.choices?.[0]?.delta?.content;
+          } else {
+            if (parsed.type === 'content_block_delta') {
+              delta = parsed.delta?.text;
+            }
           }
-        }
-        if (delta) {
-          fullContent += delta;
-          onChunk(delta);
-        }
-      } catch {}
+          if (delta) {
+            fullContent += delta;
+            onChunk(delta);
+          }
+        } catch {}
+      }
     }
+  } finally {
+    reader.releaseLock();
   }
   return fullContent;
 }

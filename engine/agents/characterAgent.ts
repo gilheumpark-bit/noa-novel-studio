@@ -1,5 +1,5 @@
 import { callAgentAI } from '../../services/agentService';
-import { AgentRole, AgentStatus, AgentOutput, AgentContext, CharacterArcState, CharacterArcStore, EMPTY_ARC_STORE } from './types';
+import { AgentRole, AgentStatus, AgentOutput, AgentContext, CharacterArcState, CharacterArcStore, EMPTY_ARC_STORE, extractFirstJSON } from './types';
 
 // ============================================================
 // Character Arc & Acting Agent (캐릭 아크 연기 에이전트)
@@ -117,9 +117,9 @@ ${emotionalHistory || '없음'}
     let directive = '';
     let content = response;
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = extractFirstJSON(response);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch);
         const parts: string[] = [];
 
         if (parsed.actingDirections?.length) {
@@ -182,7 +182,7 @@ export async function updateCharacterArcs(
 ${generatedText.slice(0, 3000)}
 
 등장 캐릭터: ${characters}
-서사 진행률: ${Math.round((ctx.config.episode / ctx.config.totalEpisodes) * 100)}%
+서사 진행률: ${Math.round((ctx.config.episode / (ctx.config.totalEpisodes || 1)) * 100)}%
 
 [현재 아크 상태]
 ${currentArcs || '초기 상태'}
@@ -197,10 +197,10 @@ ${currentArcs || '초기 상태'}
       signal: ctx.config._agentSignal as AbortSignal | undefined,
     });
 
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    const jsonMatch = extractFirstJSON(response, '[');
     if (!jsonMatch) return currentStore;
 
-    const items: any[] = JSON.parse(jsonMatch[0]);
+    const items: any[] = JSON.parse(jsonMatch);
     const newArcs: CharacterArcState[] = items
       .filter(item => item.characterName)
       .map(item => ({

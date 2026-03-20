@@ -1,6 +1,7 @@
 import { callAgentAI } from '../../services/agentService';
 import { StoryConfig, Character } from '../../types';
 import { Severity, POVType, WorldFact, WorldRule } from '../types';
+import { extractFirstJSON } from './types';
 
 // ============================================================
 // Supervisor Agent (감독 에이전트)
@@ -358,11 +359,11 @@ ${foreshadowings || '없음'}
     });
 
     // Parse response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    const jsonMatch = extractFirstJSON(response);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = JSON.parse(jsonMatch);
       const alerts: SupervisorAlert[] = (parsed.issues || []).map((issue: any, i: number) => ({
-        type: issue.type || 'warning',
+        type: (['critical', 'warning', 'info'].includes(issue.type) ? issue.type : 'warning') as SupervisorAlert['type'],
         category: 'checkpoint',
         message: issue.message || '',
         suggestion: issue.suggestion || '',

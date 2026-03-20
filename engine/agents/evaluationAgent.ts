@@ -1,5 +1,5 @@
 import { callAgentAI } from '../../services/agentService';
-import { AgentRole, AgentStatus, AgentOutput, AgentContext } from './types';
+import { AgentRole, AgentStatus, AgentOutput, AgentContext, extractFirstJSON } from './types';
 
 // ============================================================
 // Evaluation Agent (평가 에이전트)
@@ -85,9 +85,9 @@ ${ctx.generatedContent.slice(0, 4000)}
     let metadata: Record<string, any> = {};
 
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = extractFirstJSON(response);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch);
         metadata = {
           overallScore: parsed.overallScore,
           letterGrade: parsed.letterGrade,

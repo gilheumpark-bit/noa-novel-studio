@@ -1,5 +1,5 @@
 import { callAgentAI } from '../../services/agentService';
-import { AgentRole, AgentStatus, AgentOutput, AgentContext, MemoryStore, MemoryEntry, EMPTY_MEMORY_STORE } from './types';
+import { AgentRole, AgentStatus, AgentOutput, AgentContext, MemoryStore, MemoryEntry, EMPTY_MEMORY_STORE, extractFirstJSON } from './types';
 
 // ============================================================
 // Long-term Memory Agent (장기 메모리 에이전트)
@@ -103,9 +103,9 @@ ${memoryText || '없음'}
     let directive = '';
     let content = response;
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = extractFirstJSON(response);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch);
         directive = parsed.narrativeDirective || '';
         const warnings = (parsed.warnings || []).join('; ');
         content = `기억 검색 완료. ${parsed.relevantMemories?.length || 0}개 관련 기억 발견.${warnings ? ` 주의: ${warnings}` : ''}`;
@@ -150,10 +150,10 @@ ${generatedText.slice(0, 3000)}
       signal: ctx.config._agentSignal as AbortSignal | undefined,
     });
 
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    const jsonMatch = extractFirstJSON(response, '[');
     if (!jsonMatch) return [];
 
-    const items: any[] = JSON.parse(jsonMatch[0]);
+    const items: any[] = JSON.parse(jsonMatch);
     return items
       .filter(item => item.content && item.importance >= 5)
       .map(item => ({
@@ -190,7 +190,13 @@ export function updateMemorySummary(
 
   return {
     entries,
-    summary: (store.summary + summaryAddition).slice(-2000), // cap at 2000 chars
+    summary: ((s) => {
+      if (s.length <= 2000) return s;
+      // Cut at sentence boundary to avoid mid-sentence truncation
+      const cut = s.slice(s.length - 2000);
+      const sentenceStart = cut.indexOf('. ');
+      return sentenceStart > 0 && sentenceStart < 200 ? cut.slice(sentenceStart + 2) : cut;
+    })(store.summary + summaryAddition),
     lastUpdatedEpisode: episode,
   };
 }

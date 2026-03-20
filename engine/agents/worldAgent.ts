@@ -1,5 +1,5 @@
 import { callAgentAI } from '../../services/agentService';
-import { AgentRole, AgentStatus, AgentOutput, AgentContext } from './types';
+import { AgentRole, AgentStatus, AgentOutput, AgentContext, extractFirstJSON } from './types';
 
 // ============================================================
 // Worldbuilding Agent (세계관 에이전트)
@@ -78,9 +78,9 @@ ${ctx.draft}
     let directive = '';
     let content = response;
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = extractFirstJSON(response);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch);
         const parts: string[] = [];
         if (parsed.worldState) parts.push(`세계 상태: ${parsed.worldState}`);
         if (parsed.spatioTemporal) parts.push(`시공간: ${parsed.spatioTemporal}`);
