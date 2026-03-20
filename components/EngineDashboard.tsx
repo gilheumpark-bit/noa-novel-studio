@@ -1,16 +1,20 @@
 
 import React, { useMemo } from 'react';
 import { Activity, Zap, Database, ShieldCheck, AlertCircle, Cpu, BarChart3, Heart } from 'lucide-react';
-import { StoryConfig, AppLanguage } from '../types';
+import { StoryConfig, AppLanguage, AgentConfig, AgentPipelineState, DEFAULT_AGENT_CONFIG } from '../types';
 import { EngineReport, PlatformType } from '../engine/types';
 import { generateTensionCurveData } from '../engine/models';
 import { ENGINE_VERSION, TRANSLATIONS } from '../constants';
+import AgentPanel from './AgentPanel';
 
 interface EngineDashboardProps {
   config: StoryConfig;
   report: EngineReport | null;
   isGenerating: boolean;
   language: AppLanguage;
+  agentConfig?: AgentConfig;
+  agentPipelineState?: AgentPipelineState | null;
+  onAgentConfigChange?: (config: AgentConfig) => void;
 }
 
 const EMOTION_COLORS: Record<string, string> = {
@@ -19,7 +23,7 @@ const EMOTION_COLORS: Record<string, string> = {
   '호기심': 'bg-cyan-500', '절망': 'bg-zinc-500',
 };
 
-const EngineDashboard: React.FC<EngineDashboardProps> = ({ config, report, isGenerating, language }) => {
+const EngineDashboard: React.FC<EngineDashboardProps> = ({ config, report, isGenerating, language, agentConfig, agentPipelineState, onAgentConfigChange }) => {
   const totalEpisodes = config.totalEpisodes ?? 25;
   const tensionData = useMemo(() => generateTensionCurveData(totalEpisodes, config.genre), [totalEpisodes, config.genre]);
   const te = TRANSLATIONS[language].engine;
@@ -231,6 +235,17 @@ const EngineDashboard: React.FC<EngineDashboardProps> = ({ config, report, isGen
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {/* Agent Panel */}
+        {onAgentConfigChange && (
+          <div className="space-y-3">
+            <AgentPanel
+              language={language}
+              agentConfig={agentConfig ?? DEFAULT_AGENT_CONFIG}
+              pipelineState={agentPipelineState ?? null}
+              onConfigChange={onAgentConfigChange}
+            />
           </div>
         )}
       </div>

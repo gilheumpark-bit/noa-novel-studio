@@ -7,8 +7,11 @@ import {
 } from 'lucide-react';
 import {
   Message, StoryConfig, Genre,
-  AppLanguage, AppTab, PlatformType, SetConfigFn
+  AppLanguage, AppTab, PlatformType, SetConfigFn,
+  AgentConfig, AgentPipelineState,
+  DEFAULT_AGENT_CONFIG, EMPTY_MEMORY_STORE, EMPTY_ARC_STORE,
 } from './types';
+import type { MemoryStore, CharacterArcStore } from './types';
 import { TRANSLATIONS, ENGINE_VERSION } from './constants';
 import { EngineReport } from './engine/types';
 import ChatMessage from './components/ChatMessage';
@@ -23,6 +26,7 @@ import { generateStoryStream } from './services/aiService';
 import { analyzeEOSFailure } from './engine/eosFeedback';
 import { extractEmotionalState } from './engine/emotionalArc';
 import { calculateEOSScore } from './engine/scoring';
+import { runAgentPipeline } from './engine/agents/orchestrator';
 
 const STORAGE_KEY_SESSIONS = 'noa_chat_sessions_v2';
 
@@ -32,6 +36,9 @@ interface ChatSession {
   messages: Message[];
   config: StoryConfig;
   lastUpdate: number;
+  agentConfig?: AgentConfig;
+  memoryStore?: MemoryStore;
+  arcStore?: CharacterArcStore;
 }
 
 const INITIAL_CONFIG: StoryConfig = {
@@ -91,6 +98,7 @@ function App() {
   const [showDashboard, setShowDashboard] = useState(false);
   const [lastReport, setLastReport] = useState<EngineReport | null>(null);
   const [, forceUpdate] = useState(0);
+  const [agentPipelineState, setAgentPipelineState] = useState<AgentPipelineState | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -191,6 +199,13 @@ function App() {
     }
   }, [currentSession, updateCurrentSession]);
 
+  const setAgentConfig = useCallback((newConfig: AgentConfig) => {
+    if (!currentSessionId) return;
+    setSessions(prev => prev.map(s =>
+      s.id === currentSessionId ? { ...s, agentConfig: newConfig, lastUpdate: Date.now() } : s
+    ));
+  }, [currentSessionId]);
+
   const handleCancel = () => {
     abortControllerRef.current?.abort();
     setIsGenerating(false);
@@ -216,6 +231,8 @@ function App() {
     const initialAiMsg: Message = { id: aiMsgId, role: 'assistant', content: '', timestamp: Date.now() };
 
     const existingMessages = currentSession.messages;
+    const sessionAgentConfig = currentSession.agentConfig ?? DEFAULT_AGENT_CONFIG;
+    const useAgents = sessionAgentConfig.enabled;
 
     const updatedMessages = [...existingMessages, userMsg, initialAiMsg];
     updateCurrentSession({
@@ -224,32 +241,78 @@ function App() {
     });
     setInput('');
     setIsGenerating(true);
+    if (useAgents) setAgentPipelineState(null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
       let fullContent = '';
-      const result = await generateStoryStream(
-        currentSession.config,
-        text,
-        (chunk) => {
-          fullContent += chunk;
-          setSessions(prev => prev.map(s => {
-            if (s.id === currentSessionId) {
-              const msgs = s.messages.map(m => m.id === aiMsgId ? { ...m, content: fullContent } : m);
-              return { ...s, messages: msgs };
-            }
-            return s;
-          }));
-        },
-        {
+      let result: { content: string; report: EngineReport };
+
+      if (useAgents) {
+        // ── Agent Pipeline Mode ──
+        const memoryStore = currentSession.memoryStore ?? EMPTY_MEMORY_STORE;
+        const arcStore = currentSession.arcStore ?? EMPTY_ARC_STORE;
+
+        const orchestratorResult = await runAgentPipeline(
+          currentSession.config,
+          text,
+          existingMessages,
           language,
-          signal: controller.signal,
-          platform: currentSession.config.platform,
-          history: existingMessages,
-        }
-      );
+          sessionAgentConfig,
+          memoryStore,
+          arcStore,
+          {
+            onAgentUpdate: (state) => setAgentPipelineState({ ...state }),
+            onChunk: (chunk) => {
+              fullContent += chunk;
+              setSessions(prev => prev.map(s => {
+                if (s.id === currentSessionId) {
+                  const msgs = s.messages.map(m => m.id === aiMsgId ? { ...m, content: fullContent } : m);
+                  return { ...s, messages: msgs };
+                }
+                return s;
+              }));
+            },
+            onMemoryStoreUpdate: (store) => {
+              setSessions(prev => prev.map(s =>
+                s.id === currentSessionId ? { ...s, memoryStore: store } : s
+              ));
+            },
+            onArcStoreUpdate: (store) => {
+              setSessions(prev => prev.map(s =>
+                s.id === currentSessionId ? { ...s, arcStore: store } : s
+              ));
+            },
+          },
+          controller.signal,
+        );
+
+        result = { content: orchestratorResult.content, report: orchestratorResult.report };
+      } else {
+        // ── Standard Mode (existing flow) ──
+        result = await generateStoryStream(
+          currentSession.config,
+          text,
+          (chunk) => {
+            fullContent += chunk;
+            setSessions(prev => prev.map(s => {
+              if (s.id === currentSessionId) {
+                const msgs = s.messages.map(m => m.id === aiMsgId ? { ...m, content: fullContent } : m);
+                return { ...s, messages: msgs };
+              }
+              return s;
+            }));
+          },
+          {
+            language,
+            signal: controller.signal,
+            platform: currentSession.config.platform,
+            history: existingMessages,
+          }
+        );
+      }
 
       setLastReport(result.report);
       setSessions(prev => prev.map(s => {
@@ -573,6 +636,9 @@ function App() {
               report={lastReport}
               isGenerating={isGenerating}
               language={language}
+              agentConfig={currentSession.agentConfig ?? DEFAULT_AGENT_CONFIG}
+              agentPipelineState={agentPipelineState}
+              onAgentConfigChange={setAgentConfig}
             />
           )}
         </div>

@@ -1,4 +1,5 @@
 import { EngineReport, PlatformType, EpisodeState, POVType, Foreshadowing, WorldRule, WorldFact, CharacterDialogueProfile, EmotionalState, EOSHistoryEntry } from './engine/types';
+import type { AgentConfig, MemoryStore, CharacterArcStore, AgentPipelineState } from './engine/agents/types';
 
 export type AIProvider = 'gemini' | 'openai' | 'claude';
 
@@ -60,6 +61,14 @@ export interface StoryConfig {
   worldFacts?: WorldFact[];
   emotionalHistory?: EmotionalState[];
   eosHistory?: EOSHistoryEntry[];
+  // Agent system — internal, not serialized
+  _agentSignal?: AbortSignal;
+}
+
+export interface SessionAgentData {
+  agentConfig: AgentConfig;
+  memoryStore: MemoryStore;
+  arcStore: CharacterArcStore;
 }
 
 export interface Message {
@@ -97,3 +106,5 @@ export interface EngineStatus {
 
 export { PlatformType, EpisodeState, POVType } from './engine/types';
 export type { EngineReport, Foreshadowing, WorldRule, WorldFact, CharacterDialogueProfile, EmotionalState, EOSHistoryEntry } from './engine/types';
+export type { AgentConfig, MemoryStore, CharacterArcStore, AgentPipelineState } from './engine/agents/types';
+export { AgentRole, AgentStatus, DEFAULT_AGENT_CONFIG, EMPTY_MEMORY_STORE, EMPTY_ARC_STORE, createEmptyPipelineState } from './engine/agents/types';
