@@ -1,9 +1,9 @@
 
 import React, { useState } from 'react';
 import {
-  Bot, PenTool, Globe, ShieldCheck, BarChart3, Brain, UserCircle,
+  Bot, PenTool, Globe, ShieldCheck, BarChart3, Brain, UserCircle, Eye,
   ChevronDown, ChevronRight, Loader2, CheckCircle2, XCircle, SkipForward,
-  ToggleLeft, ToggleRight,
+  ToggleLeft, ToggleRight, AlertTriangle,
 } from 'lucide-react';
 import { AppLanguage } from '../types';
 import { AgentRole, AgentStatus, AgentConfig, AgentPipelineState, DEFAULT_AGENT_CONFIG } from '../engine/agents/types';
@@ -23,6 +23,7 @@ const AGENT_ICONS: Record<AgentRole, React.FC<{ className?: string }>> = {
   [AgentRole.EVALUATOR]: BarChart3,
   [AgentRole.MEMORY]: Brain,
   [AgentRole.CHARACTER]: UserCircle,
+  [AgentRole.SUPERVISOR]: Eye,
 };
 
 const AGENT_LABEL_KEYS: Record<AgentRole, string> = {
@@ -32,6 +33,7 @@ const AGENT_LABEL_KEYS: Record<AgentRole, string> = {
   [AgentRole.EVALUATOR]: 'agentEvaluator',
   [AgentRole.MEMORY]: 'agentMemory',
   [AgentRole.CHARACTER]: 'agentCharacter',
+  [AgentRole.SUPERVISOR]: 'agentSupervisor',
 };
 
 const STATUS_LABEL_KEYS: Record<AgentStatus, string> = {
@@ -53,7 +55,7 @@ const PIPELINE_ORDER: AgentRole[] = [
 
 const PHASE_GROUPS = [
   { phase: 'agentPhasePreGen', agents: [AgentRole.MEMORY, AgentRole.WORLD, AgentRole.CHARACTER] },
-  { phase: 'agentPhaseGeneration', agents: [AgentRole.WRITER] },
+  { phase: 'agentPhaseGeneration', agents: [AgentRole.WRITER, AgentRole.SUPERVISOR] },
   { phase: 'agentPhasePostGen', agents: [AgentRole.QA, AgentRole.EVALUATOR] },
 ];
 
@@ -226,6 +228,43 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ language, agentConfig, pipeline
                                 <span className="text-[7px] text-zinc-500 font-mono">
                                   {agentState.metadata.letterGrade} ({agentState.metadata.overallScore})
                                 </span>
+                              </div>
+                            )}
+                            {/* Supervisor alerts */}
+                            {agentState.metadata.alerts && (
+                              <div className="space-y-1 mt-1">
+                                <div className="text-[7px] text-zinc-600 font-black">ALERTS</div>
+                                {(agentState.metadata.alerts as any[]).slice(-5).map((alert: any, idx: number) => (
+                                  <div key={idx} className="flex items-start gap-1">
+                                    <AlertTriangle className={`w-2.5 h-2.5 shrink-0 mt-0.5 ${
+                                      alert.type === 'critical' ? 'text-red-400' :
+                                      alert.type === 'warning' ? 'text-amber-400' : 'text-zinc-500'
+                                    }`} />
+                                    <div>
+                                      <div className="text-[7px] text-zinc-400">{alert.message}</div>
+                                      <div className="text-[6px] text-zinc-600">{alert.suggestion}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {/* Supervisor EOS + tension */}
+                            {agentState.metadata.eosEstimate !== undefined && agentState.metadata.checkpointCount !== undefined && (
+                              <div className="flex gap-3 mt-1">
+                                <div className="text-[7px]">
+                                  <span className="text-zinc-600">EOS</span>{' '}
+                                  <span className={`font-mono ${agentState.metadata.eosEstimate >= 40 ? 'text-green-500' : 'text-red-400'}`}>
+                                    {agentState.metadata.eosEstimate}
+                                  </span>
+                                </div>
+                                <div className="text-[7px]">
+                                  <span className="text-zinc-600">Tension</span>{' '}
+                                  <span className="text-zinc-400 font-mono">{agentState.metadata.tensionLevel}</span>
+                                </div>
+                                <div className="text-[7px]">
+                                  <span className="text-zinc-600">CP</span>{' '}
+                                  <span className="text-zinc-400 font-mono">{agentState.metadata.checkpointCount}</span>
+                                </div>
                               </div>
                             )}
                             {/* Evaluator detail scores */}

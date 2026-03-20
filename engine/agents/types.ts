@@ -12,6 +12,7 @@ export enum AgentRole {
   EVALUATOR = 'EVALUATOR',     // 평가 에이전트
   MEMORY = 'MEMORY',           // 장기 메모리 에이전트
   CHARACTER = 'CHARACTER',     // 캐릭 아크 연기 에이전트
+  SUPERVISOR = 'SUPERVISOR',   // 감독 에이전트 (실시간 감시)
 }
 
 export enum AgentStatus {
@@ -90,6 +91,7 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
     [AgentRole.EVALUATOR]: true,
     [AgentRole.MEMORY]: true,
     [AgentRole.CHARACTER]: true,
+    [AgentRole.SUPERVISOR]: true,
   },
 };
 
@@ -107,6 +109,7 @@ export function createEmptyPipelineState(): AgentPipelineState {
       [AgentRole.WORLD]: emptyOutput(AgentRole.WORLD),
       [AgentRole.CHARACTER]: emptyOutput(AgentRole.CHARACTER),
       [AgentRole.WRITER]: emptyOutput(AgentRole.WRITER),
+      [AgentRole.SUPERVISOR]: emptyOutput(AgentRole.SUPERVISOR),
       [AgentRole.QA]: emptyOutput(AgentRole.QA),
       [AgentRole.EVALUATOR]: emptyOutput(AgentRole.EVALUATOR),
     },

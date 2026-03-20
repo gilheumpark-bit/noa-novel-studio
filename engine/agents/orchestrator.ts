@@ -13,11 +13,17 @@ import { runCharacterAgent, updateCharacterArcs } from './characterAgent';
 import { buildAgentEnhancedPrompt, createWritingAgentOutput } from './writingAgent';
 import { runQAAgent } from './qaAgent';
 import { runEvaluationAgent } from './evaluationAgent';
+import {
+  runWatchdog, runCheckpoint, createSupervisorState,
+  CHECKPOINT_INTERVAL, MIN_TEXT_FOR_CHECKPOINT,
+  type SupervisorState, type SupervisorAlert,
+} from './supervisorAgent';
+import { tensionCurve } from '../models';
 
 // ============================================================
 // Agent Orchestrator
 // ============================================================
-// Pipeline: Memory → World + Character (parallel) → Writer → QA + Evaluator (parallel)
+// Pipeline: Memory → World + Character (parallel) → Writer + Supervisor → QA + Evaluator (parallel)
 // ============================================================
 
 export interface OrchestratorCallbacks {
@@ -25,6 +31,7 @@ export interface OrchestratorCallbacks {
   onChunk: (text: string) => void;
   onMemoryStoreUpdate: (store: MemoryStore) => void;
   onArcStoreUpdate: (store: CharacterArcStore) => void;
+  onSupervisorAlert?: (alert: SupervisorAlert) => void;
 }
 
 export interface OrchestratorResult {
@@ -117,9 +124,13 @@ export async function runAgentPipeline(
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    // ── Phase 2: Writing Agent (streaming) ──
+    // ── Phase 2: Writing Agent + Supervisor (streaming) ──
     state.currentAgent = AgentRole.WRITER;
     state.agents[AgentRole.WRITER].status = AgentStatus.RUNNING;
+    const supervisorEnabled = agentConfig.agents[AgentRole.SUPERVISOR];
+    if (supervisorEnabled) {
+      state.agents[AgentRole.SUPERVISOR].status = AgentStatus.RUNNING;
+    }
     callbacks.onAgentUpdate({ ...state });
 
     const writeStart = performance.now();
@@ -134,7 +145,15 @@ export async function runAgentPipeline(
     // Build enhanced prompts
     const { systemInstruction, userPrompt } = buildAgentEnhancedPrompt(baseCtx, directives);
 
-    // Use existing streaming infrastructure with enhanced prompts
+    // Supervisor state
+    const supervisorState = createSupervisorState();
+    let lastWatchdogScan = 0;
+    let checkpointCount = 0;
+    const targetTension = Math.round(
+      tensionCurve(config.episode, config.totalEpisodes ?? 25, config.genre) * 100
+    );
+
+    // Use existing streaming infrastructure with enhanced prompts + supervisor
     let fullContent = '';
     const result = await generateStoryStreamWithCustomPrompt(
       config,
@@ -145,12 +164,97 @@ export async function runAgentPipeline(
       (chunk) => {
         fullContent += chunk;
         callbacks.onChunk(chunk);
+
+        // ── Supervisor Layer A: Regex Watchdog (every chunk) ──
+        if (supervisorEnabled && supervisorState.isActive) {
+          const watchResult = runWatchdog(fullContent, lastWatchdogScan, config);
+          lastWatchdogScan = watchResult.scannedUpTo;
+
+          for (const alert of watchResult.alerts) {
+            supervisorState.alerts.push(alert);
+            callbacks.onSupervisorAlert?.(alert);
+          }
+          supervisorState.totalChunksProcessed++;
+
+          // ── Supervisor Layer B: AI Checkpoint (every ~1000 chars) ──
+          const charsSinceCheckpoint = fullContent.length - supervisorState.lastCheckpointAt;
+          if (
+            fullContent.length >= MIN_TEXT_FOR_CHECKPOINT &&
+            charsSinceCheckpoint >= CHECKPOINT_INTERVAL
+          ) {
+            supervisorState.lastCheckpointAt = fullContent.length;
+            checkpointCount++;
+
+            // Run checkpoint asynchronously (non-blocking to stream)
+            runCheckpoint(
+              fullContent,
+              config,
+              targetTension,
+              supervisorState.alerts,
+              signal,
+            ).then(cpResult => {
+              supervisorState.checkpoints.push(cpResult);
+              for (const alert of cpResult.alerts) {
+                supervisorState.alerts.push(alert);
+                callbacks.onSupervisorAlert?.(alert);
+              }
+
+              // Update supervisor agent output with latest info
+              const alertCount = supervisorState.alerts.length;
+              const critCount = supervisorState.alerts.filter(a => a.type === 'critical').length;
+              const latestEos = cpResult.eosEstimate;
+
+              state.agents[AgentRole.SUPERVISOR] = {
+                role: AgentRole.SUPERVISOR,
+                status: AgentStatus.RUNNING,
+                content: `감시 중 — ${alertCount}건 경고 (치명적: ${critCount}), EOS: ${latestEos}, 긴장도: ${cpResult.tensionLevel}`,
+                metadata: {
+                  alertCount,
+                  criticalCount: critCount,
+                  eosEstimate: latestEos,
+                  tensionLevel: cpResult.tensionLevel,
+                  checkpointCount,
+                  interventions: cpResult.shouldIntervene ? 1 : 0,
+                },
+                durationMs: Math.round(performance.now() - writeStart),
+              };
+              callbacks.onAgentUpdate({ ...state });
+            }).catch(() => {});
+          }
+        }
       },
       signal,
     );
 
     const writeDuration = Math.round(performance.now() - writeStart);
     updateAgent(AgentRole.WRITER, createWritingAgentOutput(writeDuration, true));
+
+    // Finalize supervisor
+    if (supervisorEnabled) {
+      const totalAlerts = supervisorState.alerts.length;
+      const critAlerts = supervisorState.alerts.filter(a => a.type === 'critical').length;
+      const warnAlerts = supervisorState.alerts.filter(a => a.type === 'warning').length;
+      const lastCp = supervisorState.checkpoints[supervisorState.checkpoints.length - 1];
+      const finalEos = lastCp?.eosEstimate ?? 0;
+
+      updateAgent(AgentRole.SUPERVISOR, {
+        role: AgentRole.SUPERVISOR,
+        status: totalAlerts > 0 ? AgentStatus.DONE : AgentStatus.DONE,
+        content: `감독 완료 — 경고 ${totalAlerts}건 (치명적: ${critAlerts}, 주의: ${warnAlerts}), 체크포인트: ${checkpointCount}회, 최종 EOS 추정: ${finalEos}`,
+        metadata: {
+          alertCount: totalAlerts,
+          criticalCount: critAlerts,
+          warningCount: warnAlerts,
+          eosEstimate: finalEos,
+          tensionLevel: lastCp?.tensionLevel || 'unknown',
+          checkpointCount,
+          alerts: supervisorState.alerts.slice(-10), // keep last 10 for UI
+        },
+        durationMs: Math.round(performance.now() - writeStart),
+      });
+    } else {
+      skipAgent(AgentRole.SUPERVISOR);
+    }
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
