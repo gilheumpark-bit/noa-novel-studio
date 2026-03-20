@@ -1,5 +1,12 @@
 import { FixRecord, FixType, Severity, ValidationIssue } from './types';
-import { AppLanguage } from '../types';
+import { AppLanguage, StoryConfig } from '../types';
+import { validateDiscipline } from './discipline';
+import { validateForeshadowings } from './foreshadowing';
+import { validateWorldConsistency } from './worldConsistency';
+import { validatePOV } from './povManager';
+import { validateDialogue } from './dialogueDNA';
+import { validateEmotionalArc, extractEmotionalState } from './emotionalArc';
+import { POVType } from './types';
 
 // ============================================================
 // AI Tone Validator — Ported from ANS 9.3 Pass2AITone
@@ -215,7 +222,8 @@ export function validateStatic(text: string): { fixes: FixRecord[]; issues: Vali
 
 export function validateGeneratedContent(
   text: string,
-  language: AppLanguage
+  language: AppLanguage,
+  config?: StoryConfig
 ): { fixes: FixRecord[]; issues: ValidationIssue[]; aiToneScore: number } {
   const allFixes: FixRecord[] = [];
   const allIssues: ValidationIssue[] = [];
@@ -230,12 +238,49 @@ export function validateGeneratedContent(
     const quality = validateQuality(text);
     allFixes.push(...quality.showTellIssues);
     allFixes.push(...quality.repetitionIssues);
+
+    // DisciplineEngine — 8 anti-pattern rules
+    allIssues.push(...validateDiscipline(text));
   }
 
   // Universal validators
   const staticResult = validateStatic(text);
   allFixes.push(...staticResult.fixes);
   allIssues.push(...staticResult.issues);
+
+  // Config-dependent validators
+  if (config) {
+    const currentEpisode = config.episode;
+
+    // ForeshadowingTracker
+    if (config.foreshadowings && config.foreshadowings.length > 0) {
+      allIssues.push(...validateForeshadowings(config.foreshadowings, currentEpisode));
+    }
+
+    // WorldConsistencyEngine
+    if ((config.worldRules && config.worldRules.length > 0) || (config.worldFacts && config.worldFacts.length > 0)) {
+      allIssues.push(...validateWorldConsistency(text, config.worldRules || [], config.worldFacts || [], currentEpisode));
+    }
+
+    // POVManager — only for KO with limited POV types
+    if (language === 'KO' && config.povType && config.povCharacter) {
+      const povType = config.povType;
+      if (povType === POVType.THIRD_LIMITED || povType === POVType.FIRST_PERSON) {
+        allFixes.push(...validatePOV(text, config.povCharacter, povType, config.characters));
+      }
+    }
+
+    // DialogueDNA — validate character dialogue profiles
+    if (language === 'KO' && config.characters.length > 0) {
+      allFixes.push(...validateDialogue(text, config.characters));
+    }
+
+    // EmotionalArcTracker — validate emotional continuity
+    if (config.emotionalHistory && config.emotionalHistory.length > 0 && config.povCharacter) {
+      const currentState = extractEmotionalState(text, config.povCharacter, currentEpisode);
+      allIssues.push(...validateEmotionalArc(config.emotionalHistory, currentState));
+    }
+  }
 
   return { fixes: allFixes, issues: allIssues, aiToneScore };
 }

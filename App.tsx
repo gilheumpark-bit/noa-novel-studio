@@ -20,6 +20,9 @@ import EngineDashboard from './components/EngineDashboard';
 import EngineStatusBar from './components/EngineStatusBar';
 import ApiKeyModal from './components/ApiKeyModal';
 import { generateStoryStream } from './services/aiService';
+import { analyzeEOSFailure } from './engine/eosFeedback';
+import { extractEmotionalState } from './engine/emotionalArc';
+import { calculateEOSScore } from './engine/scoring';
 
 const STORAGE_KEY_SESSIONS = 'noa_chat_sessions_v2';
 
@@ -44,10 +47,27 @@ const INITIAL_CONFIG: StoryConfig = {
   platform: PlatformType.MOBILE,
 };
 
+function migrateConfig(raw: any): StoryConfig {
+  return {
+    ...INITIAL_CONFIG,
+    ...raw,
+    foreshadowings: raw.foreshadowings ?? [],
+    worldRules: raw.worldRules ?? [],
+    worldFacts: raw.worldFacts ?? [],
+    emotionalHistory: raw.emotionalHistory ?? [],
+    eosHistory: raw.eosHistory ?? [],
+    characters: (raw.characters ?? []).map((c: any) => ({
+      ...c,
+      dialogueProfile: c.dialogueProfile ?? undefined,
+    })),
+  };
+}
+
 function safeParseSessions(raw: string | null): ChatSession[] {
   if (!raw) return [];
   try {
-    return JSON.parse(raw);
+    const sessions: ChatSession[] = JSON.parse(raw);
+    return sessions.map(s => ({ ...s, config: migrateConfig(s.config) }));
   } catch {
     return [];
   }
@@ -239,7 +259,22 @@ function App() {
               ? { ...m, content: fullContent, meta: { engineReport: result.report, grade: result.report.grade, eosScore: result.report.eosScore, metrics: result.report.metrics } }
               : m
           );
-          return { ...s, messages: msgs };
+
+          // Save EOS history and emotional state
+          const updatedConfig = { ...s.config };
+          const eosScore = result.report.eosScore;
+          const eosFailure = analyzeEOSFailure(eosScore, fullContent, s.config.episode);
+          if (eosFailure) {
+            updatedConfig.eosHistory = [...(updatedConfig.eosHistory || []), eosFailure].slice(-5);
+          }
+          if (s.config.povCharacter) {
+            const emotionalState = extractEmotionalState(fullContent, s.config.povCharacter, s.config.episode);
+            if (Object.keys(emotionalState.emotions).length > 0) {
+              updatedConfig.emotionalHistory = [...(updatedConfig.emotionalHistory || []), emotionalState].slice(-(s.config.totalEpisodes * Math.max(1, s.config.characters.length)));
+            }
+          }
+
+          return { ...s, messages: msgs, config: updatedConfig };
         }
         return s;
       }));
@@ -316,7 +351,22 @@ function App() {
               ? { ...m, content: fullContent, meta: { engineReport: result.report, grade: result.report.grade, eosScore: result.report.eosScore, metrics: result.report.metrics } }
               : m
           );
-          return { ...s, messages: msgs };
+
+          // Save EOS history and emotional state
+          const updatedConfig = { ...s.config };
+          const eosScore = result.report.eosScore;
+          const eosFailure = analyzeEOSFailure(eosScore, fullContent, s.config.episode);
+          if (eosFailure) {
+            updatedConfig.eosHistory = [...(updatedConfig.eosHistory || []), eosFailure].slice(-5);
+          }
+          if (s.config.povCharacter) {
+            const emotionalState = extractEmotionalState(fullContent, s.config.povCharacter, s.config.episode);
+            if (Object.keys(emotionalState.emotions).length > 0) {
+              updatedConfig.emotionalHistory = [...(updatedConfig.emotionalHistory || []), emotionalState].slice(-(s.config.totalEpisodes * Math.max(1, s.config.characters.length)));
+            }
+          }
+
+          return { ...s, messages: msgs, config: updatedConfig };
         }
         return s;
       }));

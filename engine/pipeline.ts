@@ -3,6 +3,11 @@ import { EngineReport, PlatformType, getActFromEpisode } from './types';
 import { tensionCurve } from './models';
 import { generateEngineReport } from './scoring';
 import { getTargetByteRange } from './serialization';
+import { buildEOSFeedbackDirective } from './eosFeedback';
+import { buildForeshadowingDirective } from './foreshadowing';
+import { buildWorldDirective } from './worldConsistency';
+import { buildDialogueDirective } from './dialogueDNA';
+import { buildEmotionalContext } from './emotionalArc';
 
 // ============================================================
 // Dynamic System Instruction Builder
@@ -68,6 +73,17 @@ export function buildSystemInstruction(
     ).join('\n')
     : '  등록된 캐릭터 없음';
 
+  // ANS 9.5 directive sections
+  const eosFeedback = buildEOSFeedbackDirective(config.eosHistory || [], isKO);
+  const foreshadowingDir = buildForeshadowingDirective(config.foreshadowings || [], config.episode);
+  const worldDir = buildWorldDirective(config.worldRules || [], config.worldFacts || []);
+  const dialogueDir = buildDialogueDirective(config.characters);
+  const emotionalDir = buildEmotionalContext(config.emotionalHistory || [], config.characters, config.episode);
+
+  const ans95Sections = [eosFeedback, foreshadowingDir, worldDir, dialogueDir, emotionalDir]
+    .filter(s => s.length > 0)
+    .join('\n\n');
+
   return `당신은 "NOA 소설 스튜디오"의 핵심 엔진 [ANS 10.0]입니다.
 당신은 'Project EH'의 세계관 물리 법칙을 준수하며 작가와 협업하여 소설을 집필합니다.
 
@@ -95,7 +111,7 @@ ${genreGuide}
 [CHARACTER DATABASE / DIALOGUE DNA]
 ${characterDNA}
 
-[SERIALIZATION CONSTRAINTS]
+${ans95Sections ? `${ans95Sections}\n\n` : ''}[SERIALIZATION CONSTRAINTS]
 - Platform: ${platform}
 - Target byte range: ${(byteTarget.min / 1024).toFixed(1)}KB ~ ${(byteTarget.max / 1024).toFixed(1)}KB
 - 서사를 4개 파트로 나누어 출력하되, 바이트 목표 범위 내에서 마무리하십시오.

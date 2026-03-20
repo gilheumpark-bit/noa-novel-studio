@@ -3,6 +3,7 @@ import { EngineReport, PlatformType, getActFromEpisode } from './types';
 import { tensionCurve, predictEngagement } from './models';
 import { validateGeneratedContent } from './validator';
 import { calculateByteSize, getTargetByteRange } from './serialization';
+import { analyzeEOSFailure } from './eosFeedback';
 
 // ============================================================
 // EOS (Emotion OK Signal) — Ported from ANS 9.2
@@ -154,7 +155,19 @@ export function generateEngineReport(
   const metrics = analyzeMetrics(text, config);
   const eosScore = calculateEOSScore(text);
   // validateGeneratedContent already calls validateAITone internally for KO
-  const { fixes, issues, aiToneScore } = validateGeneratedContent(text, language);
+  const { fixes, issues, aiToneScore } = validateGeneratedContent(text, language, config);
+
+  // EOS failure analysis — record for prompt feedback in next generation
+  const eosFailure = analyzeEOSFailure(eosScore, text, config.episode);
+  if (eosFailure) {
+    issues.push({
+      category: 'eos_feedback',
+      message: `EOS 점수 미달 (${eosScore}/40): ${eosFailure.flags.join(', ')}`,
+      episode: config.episode,
+      severity: eosFailure.flags.includes('emotion-explained') ? 2 : 1,
+      suggestion: '다음 생성 시 피드백이 자동 반영됩니다.',
+    });
+  }
 
   const byteSize = calculateByteSize(text);
   const targetRange = getTargetByteRange(platform);

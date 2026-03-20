@@ -1,4 +1,4 @@
-import { EngineReport, PlatformType, EpisodeState } from './engine/types';
+import { EngineReport, PlatformType, EpisodeState, POVType, Foreshadowing, WorldRule, WorldFact, CharacterDialogueProfile, EmotionalState, EOSHistoryEntry } from './engine/types';
 
 export type AIProvider = 'gemini' | 'openai' | 'claude';
 
@@ -38,6 +38,7 @@ export interface Character {
   traits: string;
   appearance: string;
   dna: number;
+  dialogueProfile?: CharacterDialogueProfile;
 }
 
 export interface StoryConfig {
@@ -53,6 +54,12 @@ export interface StoryConfig {
   characters: Character[];
   platform: PlatformType;
   episodeState?: EpisodeState;
+  povType?: POVType;
+  foreshadowings?: Foreshadowing[];
+  worldRules?: WorldRule[];
+  worldFacts?: WorldFact[];
+  emotionalHistory?: EmotionalState[];
+  eosHistory?: EOSHistoryEntry[];
 }
 
 export interface Message {
@@ -88,5 +95,5 @@ export interface EngineStatus {
   platform: PlatformType;
 }
 
-export { PlatformType, EpisodeState } from './engine/types';
-export type { EngineReport } from './engine/types';
+export { PlatformType, EpisodeState, POVType } from './engine/types';
+export type { EngineReport, Foreshadowing, WorldRule, WorldFact, CharacterDialogueProfile, EmotionalState, EOSHistoryEntry } from './engine/types';

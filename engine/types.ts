@@ -18,6 +18,7 @@ export enum FixType {
   EMOTION = 'EMOTION',
   PACING = 'PACING',
   THEME = 'THEME',
+  DISCIPLINE = 'DISCIPLINE',
 }
 
 export enum Severity {
@@ -112,6 +113,57 @@ export const GENRE_TENSION_PARAMS: Record<string, GenreParams> = {
   SYSTEM_HUNTER:   { base: 0.42, amp: 0.16, accel: 0.32 },
   FANTASY_ROMANCE: { base: 0.32, amp: 0.14, accel: 0.22 },
 };
+
+// ============================================================
+// ANS 9.5 ENGINE INTERFACES
+// ============================================================
+
+export interface Foreshadowing {
+  id: string;
+  content: string;
+  plantedEpisode: number;
+  expectedPayoffEpisode: number;
+  importance: number; // 1-10
+  resolved: boolean;
+  resolvedEpisode?: number;
+}
+
+export interface WorldRule {
+  id: string;
+  description: string;
+  category: 'physics' | 'magic' | 'society' | 'technology';
+}
+
+export interface WorldFact {
+  id: string;
+  content: string;
+  episodeEstablished: number;
+  isPermanent: boolean;
+}
+
+export interface CharacterDialogueProfile {
+  sentenceLength: 'short' | 'medium' | 'long';
+  formality: number; // 0.0 ~ 1.0
+  speechPattern: string; // 서술형, 명령형, 질문형
+  quirks: string[];
+  endingStyle: string; // ~다, ~어, ~까?
+}
+
+export interface EmotionalState {
+  character: string;
+  episode: number;
+  emotions: Record<string, number>; // emotion name → intensity 0-1
+}
+
+export interface EOSHistoryEntry {
+  score: number;
+  flags: string[];
+  episode: number;
+}
+
+// ============================================================
+// ENGINE REPORT
+// ============================================================
 
 export interface EngineReport {
   version: string;
