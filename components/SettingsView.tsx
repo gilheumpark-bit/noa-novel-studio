@@ -100,7 +100,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
                 </div>
               </div>
               <div className="text-[10px] font-black text-blue-500 uppercase shrink-0 ml-2">
-                {localStorage.getItem('noa_api_key') ? (isKO ? '설정됨' : 'Set') : (isKO ? '미설정' : 'Not Set')}
+                {sessionStorage.getItem('noa_api_key_gemini') || sessionStorage.getItem('noa_api_key_openai') || sessionStorage.getItem('noa_api_key_claude') ? (isKO ? '설정됨' : 'Set') : (isKO ? '미설정' : 'Not Set')}
               </div>
             </div>
 

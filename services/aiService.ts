@@ -30,27 +30,45 @@ export const PROVIDER_MODELS: Record<AIProvider, string[]> = {
 // ============================================================
 
 export function getStoredProvider(): AIProvider {
-  return (localStorage.getItem('noa_ai_provider') as AIProvider) || 'gemini';
+  return (sessionStorage.getItem('noa_ai_provider') as AIProvider) || 'gemini';
 }
 
 export function getStoredApiKey(provider: AIProvider): string {
-  return localStorage.getItem(`noa_api_key_${provider}`) || '';
+  return sessionStorage.getItem(`noa_api_key_${provider}`) || '';
 }
 
 export function getStoredModel(provider: AIProvider): string {
-  return localStorage.getItem(`noa_ai_model_${provider}`) || DEFAULT_MODELS[provider];
+  return sessionStorage.getItem(`noa_ai_model_${provider}`) || DEFAULT_MODELS[provider];
 }
 
 export function setStoredProvider(provider: AIProvider): void {
-  localStorage.setItem('noa_ai_provider', provider);
+  sessionStorage.setItem('noa_ai_provider', provider);
 }
 
 export function setStoredApiKey(provider: AIProvider, key: string): void {
-  localStorage.setItem(`noa_api_key_${provider}`, key);
+  sessionStorage.setItem(`noa_api_key_${provider}`, key);
 }
 
 export function setStoredModel(provider: AIProvider, model: string): void {
-  localStorage.setItem(`noa_ai_model_${provider}`, model);
+  sessionStorage.setItem(`noa_ai_model_${provider}`, model);
+}
+
+export function clearAllApiKeys(): void {
+  sessionStorage.removeItem('noa_ai_provider');
+  sessionStorage.removeItem('noa_api_key_gemini');
+  sessionStorage.removeItem('noa_api_key_openai');
+  sessionStorage.removeItem('noa_api_key_claude');
+  sessionStorage.removeItem('noa_ai_model_gemini');
+  sessionStorage.removeItem('noa_ai_model_openai');
+  sessionStorage.removeItem('noa_ai_model_claude');
+}
+
+export function hasAnyApiKey(): boolean {
+  return !!(
+    sessionStorage.getItem('noa_api_key_gemini') ||
+    sessionStorage.getItem('noa_api_key_openai') ||
+    sessionStorage.getItem('noa_api_key_claude')
+  );
 }
 
 export function getCurrentProviderConfig(): { provider: AIProvider; apiKey: string; model: string } {

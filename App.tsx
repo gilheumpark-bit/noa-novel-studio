@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus, Settings, Send,
   Sparkles, Menu, Globe, UserCircle,
-  BookOpen, Zap, Ghost, X, PenTool, History, StopCircle
+  BookOpen, Zap, Ghost, X, PenTool, History, StopCircle, Key, LogOut
 } from 'lucide-react';
 import {
   Message, StoryConfig, Genre,
@@ -22,7 +22,7 @@ import RulebookView from './components/RulebookView';
 import EngineDashboard from './components/EngineDashboard';
 import EngineStatusBar from './components/EngineStatusBar';
 import ApiKeyModal from './components/ApiKeyModal';
-import { generateStoryStream } from './services/aiService';
+import { generateStoryStream, hasAnyApiKey, clearAllApiKeys } from './services/aiService';
 import { analyzeEOSFailure } from './engine/eosFeedback';
 import { extractEmotionalState } from './engine/emotionalArc';
 import { calculateEOSScore } from './engine/scoring';
@@ -99,6 +99,7 @@ function App() {
   const [lastReport, setLastReport] = useState<EngineReport | null>(null);
   const [, forceUpdate] = useState(0);
   const [agentPipelineState, setAgentPipelineState] = useState<AgentPipelineState | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => hasAnyApiKey());
   const abortControllerRef = useRef<AbortController | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -460,8 +461,66 @@ function App() {
   };
 
   const handleApiKeySaved = () => {
+    setIsLoggedIn(true);
     forceUpdate(n => n + 1);
   };
+
+  const handleLogout = () => {
+    const confirmMsg = ({
+      KO: 'API 키를 삭제하고 로그아웃하시겠습니까?',
+      EN: 'Clear API keys and log out?',
+      JP: 'APIキーを削除してログアウトしますか？',
+      CN: '清除API密钥并退出？',
+    })[language];
+    if (window.confirm(confirmMsg)) {
+      clearAllApiKeys();
+      setIsLoggedIn(false);
+    }
+  };
+
+  // Login gate — show API key entry screen if not logged in
+  if (!isLoggedIn) {
+    return (
+      <div className="flex h-screen bg-[#050505] text-zinc-300 font-sans items-center justify-center">
+        <div className="w-full max-w-sm mx-4 text-center space-y-8">
+          <div className="space-y-3">
+            <div className="flex items-center justify-center gap-3 mb-6">
+              <Zap className="w-8 h-8 text-blue-500" />
+              <h1 className="text-2xl font-black italic tracking-tighter">NOA STUDIO</h1>
+            </div>
+            <p className="text-zinc-600 text-xs font-bold uppercase tracking-widest">
+              {language === 'KO' ? 'AI 소설 엔진' : language === 'JP' ? 'AI小説エンジン' : language === 'CN' ? 'AI小说引擎' : 'AI Novel Engine'}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowApiKeyModal(true)}
+            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-500 transition-all flex items-center justify-center gap-2"
+          >
+            <Key className="w-4 h-4" />
+            {language === 'KO' ? 'API 키 입력' : language === 'JP' ? 'APIキー入力' : language === 'CN' ? '输入API密钥' : 'Enter API Key'}
+          </button>
+          <div className="flex justify-center gap-4">
+            {(['KO', 'EN', 'JP', 'CN'] as AppLanguage[]).map(l => (
+              <button key={l} onClick={() => setLanguage(l)} className={`text-[10px] font-black ${language === l ? 'text-blue-500' : 'text-zinc-700'}`}>{l}</button>
+            ))}
+          </div>
+          <p className="text-[9px] text-zinc-800">
+            {language === 'KO' ? 'API 키는 현재 세션에만 저장되며 브라우저 종료 시 삭제됩니다.' :
+             language === 'JP' ? 'APIキーは現在のセッションにのみ保存され、ブラウザ終了時に削除されます。' :
+             language === 'CN' ? 'API密钥仅保存在当前会话中，关闭浏览器时会被删除。' :
+             'API keys are stored only for this session and cleared when the browser is closed.'}
+          </p>
+        </div>
+        {showApiKeyModal && (
+          <ApiKeyModal
+            language={language}
+            onClose={() => setShowApiKeyModal(false)}
+            onSave={handleApiKeySaved}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#050505] text-zinc-300 font-sans overflow-hidden">
@@ -499,12 +558,21 @@ function App() {
               <button key={l} onClick={() => setLanguage(l)} className={`text-[10px] font-black ${language === l ? 'text-blue-500' : 'text-zinc-700'}`}>{l}</button>
             ))}
           </div>
-          <button
-            onClick={() => handleTabChange('settings')}
-            className={`flex items-center gap-2 text-xs font-bold transition-colors ${activeTab === 'settings' ? 'text-blue-500' : 'text-zinc-600 hover:text-white'}`}
-          >
-            <Settings className="w-4 h-4" /> {t.sidebar.settings}
-          </button>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => handleTabChange('settings')}
+              className={`flex items-center gap-2 text-xs font-bold transition-colors ${activeTab === 'settings' ? 'text-blue-500' : 'text-zinc-600 hover:text-white'}`}
+            >
+              <Settings className="w-4 h-4" /> {t.sidebar.settings}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1 px-2 py-1 text-[9px] font-bold text-zinc-700 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+              title={language === 'KO' ? '로그아웃' : 'Logout'}
+            >
+              <LogOut className="w-3 h-3" />
+            </button>
+          </div>
         </div>
       </aside>
 
