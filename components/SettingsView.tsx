@@ -180,7 +180,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
                 min={1}
                 max={200}
                 value={defaultEpisodes}
-                onChange={e => { const v = parseInt(e.target.value) || 25; setDefaultEpisodes(v); localStorage.setItem('noa_default_episodes', String(v)); }}
+                onChange={e => { const v = Math.max(1, Math.min(200, parseInt(e.target.value) || 25)); setDefaultEpisodes(v); localStorage.setItem('noa_default_episodes', String(v)); }}
                 className="w-20 bg-black/50 border border-zinc-800 rounded-xl px-3 py-2 text-sm font-black text-center text-blue-400 focus:border-blue-500 outline-none"
               />
             </div>

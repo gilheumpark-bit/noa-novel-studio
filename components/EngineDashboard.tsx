@@ -38,7 +38,7 @@ const EngineDashboard: React.FC<EngineDashboardProps> = ({ config, report, isGen
       byChar[s.character].push(s);
     }
     return Object.entries(byChar).map(([name, states]) => {
-      const sorted = states.sort((a, b) => a.episode - b.episode);
+      const sorted = [...states].sort((a, b) => a.episode - b.episode);
       const latest = sorted[sorted.length - 1];
       const topEmotions = Object.entries(latest.emotions)
         .filter(([, v]) => v > 0.05)

@@ -156,7 +156,7 @@ function App() {
       config: newConfig,
       lastUpdate: Date.now()
     };
-    setSessions([newSession, ...sessions]);
+    setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
     setActiveTab('world');
     if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -199,13 +199,17 @@ function App() {
   }, [currentSessionId]);
 
   const setConfig: SetConfigFn = useCallback((newConfig) => {
-    if (!currentSession) return;
+    if (!currentSessionId) return;
     if (typeof newConfig === 'function') {
-      updateCurrentSession({ config: newConfig(currentSession.config) });
+      setSessions(prev => prev.map(s =>
+        s.id === currentSessionId
+          ? { ...s, config: newConfig(s.config), lastUpdate: Date.now() }
+          : s
+      ));
     } else {
       updateCurrentSession({ config: newConfig });
     }
-  }, [currentSession, updateCurrentSession]);
+  }, [currentSessionId, updateCurrentSession]);
 
   const setAgentConfig = useCallback((newConfig: AgentConfig) => {
     if (!currentSessionId) return;
