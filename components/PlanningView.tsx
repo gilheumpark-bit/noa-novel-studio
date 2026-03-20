@@ -21,6 +21,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
   const [showForeshadowing, setShowForeshadowing] = useState(false);
   const [showWorldRules, setShowWorldRules] = useState(false);
   const [showWorldFacts, setShowWorldFacts] = useState(false);
+  const [formResetKey, setFormResetKey] = useState(0);
 
   const totalEpisodes = config.totalEpisodes ?? 25;
   const tensionData = useMemo(() => generateTensionCurveData(totalEpisodes, config.genre), [totalEpisodes, config.genre]);
@@ -163,7 +164,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
           <textarea
             className="w-full bg-black border border-zinc-800 rounded-2xl p-6 text-sm h-64 resize-none focus:border-blue-600 outline-none font-serif leading-relaxed"
             placeholder={t.synopsisPlaceholder}
-            value={config.synopsis}
+            value={config.synopsis ?? ''}
             onChange={e => setConfig({ ...config, synopsis: e.target.value })}
           />
         </div>
@@ -290,7 +291,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
               );
             })}
             {/* Add foreshadowing form */}
-            <div className="flex flex-wrap gap-2 items-end">
+            <div key={`fs-form-${formResetKey}`} className="flex flex-wrap gap-2 items-end">
               <input
                 id="fs-content"
                 className="flex-1 min-w-[200px] bg-black border border-zinc-800 rounded-lg p-3 text-xs focus:border-blue-600 outline-none"
@@ -314,7 +315,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
                     expectedPayoffEpisode: payoff, importance, resolved: false,
                   };
                   setConfig({ ...config, foreshadowings: [...(config.foreshadowings || []), newF] });
-                  (document.getElementById('fs-content') as HTMLInputElement).value = '';
+                  setFormResetKey(k => k + 1);
                 }}
                 className="px-4 py-3 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all"
               >
@@ -351,7 +352,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
                 </button>
               </div>
             ))}
-            <div className="flex flex-wrap gap-2 items-end">
+            <div key={`wr-form-${formResetKey}`} className="flex flex-wrap gap-2 items-end">
               <select id="wr-cat" className="w-32 bg-black border border-zinc-800 rounded-lg p-3 text-xs focus:border-blue-600 outline-none cursor-pointer">
                 {WORLD_RULE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -364,7 +365,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
                   const cat = (document.getElementById('wr-cat') as HTMLSelectElement)?.value as WorldRule['category'];
                   const newRule: WorldRule = { id: `wr-${Date.now()}`, description: desc, category: cat };
                   setConfig({ ...config, worldRules: [...(config.worldRules || []), newRule] });
-                  (document.getElementById('wr-desc') as HTMLInputElement).value = '';
+                  setFormResetKey(k => k + 1);
                 }}
                 className="px-4 py-3 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all"
               >
@@ -404,7 +405,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
                 </button>
               </div>
             ))}
-            <div className="flex flex-wrap gap-2 items-end">
+            <div key={`wf-form-${formResetKey}`} className="flex flex-wrap gap-2 items-end">
               <input id="wf-content" className="flex-1 min-w-[200px] bg-black border border-zinc-800 rounded-lg p-3 text-xs focus:border-blue-600 outline-none"
                 placeholder={te.worldFactContent} />
               <input id="wf-ep" type="number" min="1" max={config.totalEpisodes} defaultValue={config.episode}
@@ -421,7 +422,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
                   const perm = (document.getElementById('wf-perm') as HTMLInputElement)?.checked || false;
                   const newFact: WorldFact = { id: `wf-${Date.now()}`, content, episodeEstablished: ep, isPermanent: perm };
                   setConfig({ ...config, worldFacts: [...(config.worldFacts || []), newFact] });
-                  (document.getElementById('wf-content') as HTMLInputElement).value = '';
+                  setFormResetKey(k => k + 1);
                 }}
                 className="px-4 py-3 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all"
               >

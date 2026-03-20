@@ -91,7 +91,7 @@ export async function runCharacterAgent(
       .map(e => `EP.${e.episode} ${e.character}: ${Object.entries(e.emotions).map(([k, v]) => `${k}(${v.toFixed(2)})`).join(', ')}`)
       .join('\n');
 
-    const narrativeProgress = ctx.config.episode / ctx.config.totalEpisodes;
+    const narrativeProgress = ctx.config.totalEpisodes > 0 ? ctx.config.episode / ctx.config.totalEpisodes : 0;
 
     const userPrompt = `에피소드: ${ctx.config.episode} / ${ctx.config.totalEpisodes} (서사 진행률: ${Math.round(narrativeProgress * 100)}%)
 장르: ${ctx.config.genre}

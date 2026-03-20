@@ -126,10 +126,12 @@ function App() {
     };
   }, [sessions]);
 
-  // Flush on unmount
+  // Flush on unmount — use ref to avoid stale closure
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
   useEffect(() => {
     return () => {
-      localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+      localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessionsRef.current));
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -142,11 +144,16 @@ function App() {
 
   const createNewSession = () => {
     const sessionTitles: Record<AppLanguage, string> = { KO: "새로운 소설", EN: "New Story", JP: "新しい小説", CN: "新小说" };
+    const savedPlatform = localStorage.getItem('noa_default_platform') as PlatformType | null;
+    const savedEpisodes = parseInt(localStorage.getItem('noa_default_episodes') || '0');
+    const newConfig = structuredClone(INITIAL_CONFIG);
+    if (savedPlatform) newConfig.platform = savedPlatform;
+    if (savedEpisodes > 0) newConfig.totalEpisodes = savedEpisodes;
     const newSession: ChatSession = {
       id: `session-${crypto.randomUUID()}`,
       title: sessionTitles[language],
       messages: [],
-      config: structuredClone(INITIAL_CONFIG),
+      config: newConfig,
       lastUpdate: Date.now()
     };
     setSessions([newSession, ...sessions]);
@@ -371,6 +378,8 @@ function App() {
     if (userMsg.role !== 'user') return;
 
     const historyMessages = currentSession.messages.slice(0, msgIndex - 1);
+    const sessionAgentConfig = currentSession.agentConfig ?? DEFAULT_AGENT_CONFIG;
+    const useAgents = sessionAgentConfig.enabled;
 
     setSessions(prev => prev.map(s => {
       if (s.id === currentSessionId) {
@@ -380,32 +389,75 @@ function App() {
       return s;
     }));
     setIsGenerating(true);
+    if (useAgents) setAgentPipelineState(null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
       let fullContent = '';
-      const result = await generateStoryStream(
-        currentSession.config,
-        userMsg.content,
-        (chunk) => {
-          fullContent += chunk;
-          setSessions(prev => prev.map(s => {
-            if (s.id === currentSessionId) {
-              const msgs = s.messages.map(m => m.id === assistantMsgId ? { ...m, content: fullContent } : m);
-              return { ...s, messages: msgs };
-            }
-            return s;
-          }));
-        },
-        {
+      let result: { content: string; report: EngineReport };
+
+      if (useAgents) {
+        const memoryStore = currentSession.memoryStore ?? EMPTY_MEMORY_STORE;
+        const arcStore = currentSession.arcStore ?? EMPTY_ARC_STORE;
+
+        const orchestratorResult = await runAgentPipeline(
+          currentSession.config,
+          userMsg.content,
+          historyMessages,
           language,
-          signal: controller.signal,
-          platform: currentSession.config.platform,
-          history: historyMessages,
-        }
-      );
+          sessionAgentConfig,
+          memoryStore,
+          arcStore,
+          {
+            onAgentUpdate: (state) => setAgentPipelineState({ ...state }),
+            onChunk: (chunk) => {
+              fullContent += chunk;
+              setSessions(prev => prev.map(s => {
+                if (s.id === currentSessionId) {
+                  const msgs = s.messages.map(m => m.id === assistantMsgId ? { ...m, content: fullContent } : m);
+                  return { ...s, messages: msgs };
+                }
+                return s;
+              }));
+            },
+            onMemoryStoreUpdate: (store) => {
+              setSessions(prev => prev.map(s =>
+                s.id === currentSessionId ? { ...s, memoryStore: store } : s
+              ));
+            },
+            onArcStoreUpdate: (store) => {
+              setSessions(prev => prev.map(s =>
+                s.id === currentSessionId ? { ...s, arcStore: store } : s
+              ));
+            },
+          },
+          controller.signal,
+        );
+        result = { content: orchestratorResult.content, report: orchestratorResult.report };
+      } else {
+        result = await generateStoryStream(
+          currentSession.config,
+          userMsg.content,
+          (chunk) => {
+            fullContent += chunk;
+            setSessions(prev => prev.map(s => {
+              if (s.id === currentSessionId) {
+                const msgs = s.messages.map(m => m.id === assistantMsgId ? { ...m, content: fullContent } : m);
+                return { ...s, messages: msgs };
+              }
+              return s;
+            }));
+          },
+          {
+            language,
+            signal: controller.signal,
+            platform: currentSession.config.platform,
+            history: historyMessages,
+          }
+        );
+      }
 
       setLastReport(result.report);
       setSessions(prev => prev.map(s => {
@@ -416,7 +468,6 @@ function App() {
               : m
           );
 
-          // Save EOS history and emotional state
           const updatedConfig = { ...s.config };
           const eosScore = result.report.eosScore;
           const eosFailure = analyzeEOSFailure(eosScore, fullContent, s.config.episode);

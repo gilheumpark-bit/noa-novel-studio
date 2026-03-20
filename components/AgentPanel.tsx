@@ -44,15 +44,6 @@ const STATUS_LABEL_KEYS: Record<AgentStatus, string> = {
   [AgentStatus.SKIPPED]: 'agentSkipped',
 };
 
-const PIPELINE_ORDER: AgentRole[] = [
-  AgentRole.MEMORY,
-  AgentRole.WORLD,
-  AgentRole.CHARACTER,
-  AgentRole.WRITER,
-  AgentRole.QA,
-  AgentRole.EVALUATOR,
-];
-
 const PHASE_GROUPS = [
   { phase: 'agentPhasePreGen', agents: [AgentRole.MEMORY, AgentRole.WORLD, AgentRole.CHARACTER] },
   { phase: 'agentPhaseGeneration', agents: [AgentRole.WRITER, AgentRole.SUPERVISOR] },

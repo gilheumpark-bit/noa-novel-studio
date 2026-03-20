@@ -239,7 +239,7 @@ export async function runAgentPipeline(
 
       updateAgent(AgentRole.SUPERVISOR, {
         role: AgentRole.SUPERVISOR,
-        status: totalAlerts > 0 ? AgentStatus.DONE : AgentStatus.DONE,
+        status: critAlerts > 0 ? AgentStatus.ERROR : AgentStatus.DONE,
         content: `감독 완료 — 경고 ${totalAlerts}건 (치명적: ${critAlerts}, 주의: ${warnAlerts}), 체크포인트: ${checkpointCount}회, 최종 EOS 추정: ${finalEos}`,
         metadata: {
           alertCount: totalAlerts,

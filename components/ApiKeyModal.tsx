@@ -158,7 +158,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ language, onClose, onSave }) 
           </button>
           <button
             onClick={handleSave}
-            disabled={!currentKey.trim()}
+            disabled={!currentKey.trim() || status === 'error'}
             className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-500 transition-all disabled:opacity-50"
           >
             {t.apiKeySave}
