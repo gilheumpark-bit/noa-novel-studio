@@ -9,6 +9,7 @@ export function tensionCurve(
   totalEpisodes: number = 25,
   genre: string = 'SF'
 ): number {
+  if (totalEpisodes <= 0) totalEpisodes = 1;
   const x = episode / totalEpisodes;
   const params = GENRE_TENSION_PARAMS[genre.toUpperCase()] ?? GENRE_TENSION_PARAMS.SF;
 

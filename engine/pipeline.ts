@@ -3,6 +3,12 @@ import { EngineReport, PlatformType, getActFromEpisode } from './types';
 import { tensionCurve } from './models';
 import { generateEngineReport } from './scoring';
 import { getTargetByteRange } from './serialization';
+import { buildEOSFeedbackDirective } from './eosFeedback';
+import { buildForeshadowingDirective } from './foreshadowing';
+import { buildWorldDirective } from './worldConsistency';
+import { buildDialogueDirective } from './dialogueDNA';
+import { buildEmotionalContext } from './emotionalArc';
+import { buildCausalityDirective } from './causalityEngine';
 
 // ============================================================
 // Dynamic System Instruction Builder
@@ -56,7 +62,12 @@ export function buildSystemInstruction(
   const totalEpisodes = config.totalEpisodes ?? 25;
   const actInfo = getActFromEpisode(config.episode, totalEpisodes);
   const targetTension = Math.round(tensionCurve(config.episode, totalEpisodes, config.genre) * 100);
-  const byteTarget = getTargetByteRange(platform);
+  // Use user-defined guardrails (character count) if set, otherwise fall back to platform byte defaults
+  // Korean: ~3 bytes per char on average (UTF-8)
+  const guardrailBytes = config.guardrails
+    ? { min: config.guardrails.min * 3, max: config.guardrails.max * 3 }
+    : getTargetByteRange(platform);
+  const byteTarget = guardrailBytes;
   const isKO = language === 'KO';
   const actGuide = ACT_GUIDELINES[actInfo.act] ?? ACT_GUIDELINES[1];
   const genreGuide = GENRE_GUIDELINES[config.genre] ?? '';
@@ -67,6 +78,25 @@ export function buildSystemInstruction(
       `  - ${c.name} (${c.role}): ${c.traits}. DNA: ${c.dna}`
     ).join('\n')
     : '  등록된 캐릭터 없음';
+
+  // ANS 9.5 directive sections
+  const eosFeedback = buildEOSFeedbackDirective(config.eosHistory || [], isKO);
+  const foreshadowingDir = buildForeshadowingDirective(config.foreshadowings || [], config.episode);
+  const worldDir = buildWorldDirective(config.worldRules || [], config.worldFacts || []);
+  const dialogueDir = buildDialogueDirective(config.characters);
+  const emotionalDir = buildEmotionalContext(config.emotionalHistory || [], config.characters, config.episode);
+
+  // Causality Engine directive (if level is set)
+  const causalityDir = config.causalityLevel
+    ? buildCausalityDirective(config.causalityLevel, config.ehScore, isKO)
+    : '';
+
+  // Episode Directing Sheet (if scenes are set)
+  const directingDir = buildDirectingDirective(config);
+
+  const ans95Sections = [causalityDir, directingDir, eosFeedback, foreshadowingDir, worldDir, dialogueDir, emotionalDir]
+    .filter(s => s.length > 0)
+    .join('\n\n');
 
   return `당신은 "NOA 소설 스튜디오"의 핵심 엔진 [ANS 10.0]입니다.
 당신은 'Project EH'의 세계관 물리 법칙을 준수하며 작가와 협업하여 소설을 집필합니다.
@@ -95,10 +125,11 @@ ${genreGuide}
 [CHARACTER DATABASE / DIALOGUE DNA]
 ${characterDNA}
 
-[SERIALIZATION CONSTRAINTS]
+${ans95Sections ? `${ans95Sections}\n\n` : ''}[SERIALIZATION CONSTRAINTS]
 - Platform: ${platform}
-- Target byte range: ${(byteTarget.min / 1024).toFixed(1)}KB ~ ${(byteTarget.max / 1024).toFixed(1)}KB
-- 서사를 4개 파트로 나누어 출력하되, 바이트 목표 범위 내에서 마무리하십시오.
+- Target character count: ${config.guardrails?.min ?? Math.round(byteTarget.min / 3)}자 ~ ${config.guardrails?.max ?? Math.round(byteTarget.max / 3)}자 (약 ${(byteTarget.min / 1024).toFixed(1)}KB ~ ${(byteTarget.max / 1024).toFixed(1)}KB)
+- 반드시 최소 ${config.guardrails?.min ?? Math.round(byteTarget.min / 3)}자 이상, 최대 ${config.guardrails?.max ?? Math.round(byteTarget.max / 3)}자 이하로 작성하십시오.
+- 서사를 4개 파트로 나누어 출력하되, 목표 글자 수 범위 내에서 마무리하십시오.
 
 [QUALITY DIRECTIVES]
 - AI톤 금지: "그러나", "반면에", "한편으로는", "따라서", "그러므로" 사용 자제
@@ -151,6 +182,57 @@ ${draft}
 
 Please execute the high-density narrative generation in ${langName}.
 All analysis results and JSON critiques must also be provided in ${langName}.`;
+}
+
+// ============================================================
+// Episode Directing Directive Builder
+// ============================================================
+
+const BEAT_LABELS: Record<string, string> = {
+  goguma: '고구마(답답)',
+  cider: '사이다(시원)',
+  dopamine: '도파민(쾌감)',
+  hook: '훅(몰입)',
+  tension: '긴장',
+  breather: '숨고르기',
+};
+
+function buildDirectingDirective(config: StoryConfig): string {
+  const d = config.episodeDirecting;
+  if (!d || d.scenes.length === 0) return '';
+
+  const lines: string[] = [];
+  lines.push('[EPISODE DIRECTING SHEET]');
+
+  if (d.overallMood) lines.push(`전체 분위기: ${d.overallMood}`);
+  if (d.openingHook) lines.push(`오프닝 훅: ${d.openingHook}`);
+  if (d.endingHook) lines.push(`엔딩 클리프행어: ${d.endingHook}`);
+
+  for (const scene of d.scenes) {
+    lines.push('');
+    lines.push(`[S${scene.sceneNumber}] ${scene.title || '무제'}`);
+    if (scene.location) lines.push(`  장소: ${scene.location}`);
+    if (scene.characters.length > 0) lines.push(`  등장인물: ${scene.characters.join(', ')}`);
+    if (scene.mood) lines.push(`  연출: ${scene.mood}`);
+    if (scene.emotion) lines.push(`  감정: ${scene.emotion}`);
+
+    if (scene.beats.length > 0) {
+      lines.push('  비트:');
+      for (const beat of scene.beats) {
+        const label = BEAT_LABELS[beat.type] || beat.type;
+        lines.push(`    - [${label} ${beat.intensity}%] ${beat.description}`);
+      }
+    }
+
+    if (scene.dialogueNotes.length > 0) {
+      lines.push('  대사 노트:');
+      for (const dn of scene.dialogueNotes) {
+        lines.push(`    - ${dn.characterName}: ${dn.note}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
 }
 
 // ============================================================

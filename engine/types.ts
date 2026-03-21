@@ -18,6 +18,7 @@ export enum FixType {
   EMOTION = 'EMOTION',
   PACING = 'PACING',
   THEME = 'THEME',
+  DISCIPLINE = 'DISCIPLINE',
 }
 
 export enum Severity {
@@ -68,12 +69,14 @@ export interface ActInfo {
 }
 
 export function getActFromEpisode(episode: number, totalEpisodes: number): ActInfo {
-  const x = episode / totalEpisodes;
-  if (x <= 0.20) return { act: 1, name: '도입/설정', nameEN: 'Setup', progress: x / 0.20 };
-  if (x <= 0.40) return { act: 2, name: '상승/갈등', nameEN: 'Rising', progress: (x - 0.20) / 0.20 };
-  if (x <= 0.60) return { act: 3, name: '중반/전환', nameEN: 'Midpoint', progress: (x - 0.40) / 0.20 };
-  if (x <= 0.80) return { act: 4, name: '하강/위기', nameEN: 'Falling', progress: (x - 0.60) / 0.20 };
-  return { act: 5, name: '절정/해결', nameEN: 'Climax', progress: (x - 0.80) / 0.20 };
+  if (totalEpisodes <= 0) totalEpisodes = 1;
+  const x = Math.max(0, episode / totalEpisodes);
+  const clamp = (v: number) => Math.min(1, Math.max(0, v));
+  if (x <= 0.20) return { act: 1, name: '도입/설정', nameEN: 'Setup', progress: clamp(x / 0.20) };
+  if (x <= 0.40) return { act: 2, name: '상승/갈등', nameEN: 'Rising', progress: clamp((x - 0.20) / 0.20) };
+  if (x <= 0.60) return { act: 3, name: '중반/전환', nameEN: 'Midpoint', progress: clamp((x - 0.40) / 0.20) };
+  if (x <= 0.80) return { act: 4, name: '하강/위기', nameEN: 'Falling', progress: clamp((x - 0.60) / 0.20) };
+  return { act: 5, name: '절정/해결', nameEN: 'Climax', progress: clamp((x - 0.80) / 0.20) };
 }
 
 // ============================================================
@@ -112,6 +115,57 @@ export const GENRE_TENSION_PARAMS: Record<string, GenreParams> = {
   SYSTEM_HUNTER:   { base: 0.42, amp: 0.16, accel: 0.32 },
   FANTASY_ROMANCE: { base: 0.32, amp: 0.14, accel: 0.22 },
 };
+
+// ============================================================
+// ANS 9.5 ENGINE INTERFACES
+// ============================================================
+
+export interface Foreshadowing {
+  id: string;
+  content: string;
+  plantedEpisode: number;
+  expectedPayoffEpisode: number;
+  importance: number; // 1-10
+  resolved: boolean;
+  resolvedEpisode?: number;
+}
+
+export interface WorldRule {
+  id: string;
+  description: string;
+  category: 'physics' | 'magic' | 'society' | 'technology';
+}
+
+export interface WorldFact {
+  id: string;
+  content: string;
+  episodeEstablished: number;
+  isPermanent: boolean;
+}
+
+export interface CharacterDialogueProfile {
+  sentenceLength: 'short' | 'medium' | 'long';
+  formality: number; // 0.0 ~ 1.0
+  speechPattern: string; // 서술형, 명령형, 질문형
+  quirks: string[];
+  endingStyle: string; // ~다, ~어, ~까?
+}
+
+export interface EmotionalState {
+  character: string;
+  episode: number;
+  emotions: Record<string, number>; // emotion name → intensity 0-1
+}
+
+export interface EOSHistoryEntry {
+  score: number;
+  flags: string[];
+  episode: number;
+}
+
+// ============================================================
+// ENGINE REPORT
+// ============================================================
 
 export interface EngineReport {
   version: string;

@@ -1,5 +1,13 @@
 import { FixRecord, FixType, Severity, ValidationIssue } from './types';
-import { AppLanguage } from '../types';
+import { AppLanguage, StoryConfig } from '../types';
+import { validateDiscipline } from './discipline';
+import { validateForeshadowings } from './foreshadowing';
+import { validateWorldConsistency } from './worldConsistency';
+import { validatePOV } from './povManager';
+import { validateDialogue } from './dialogueDNA';
+import { validateEmotionalArc, extractEmotionalState } from './emotionalArc';
+import { validateCausality } from './causalityEngine';
+import { POVType } from './types';
 
 // ============================================================
 // AI Tone Validator — Ported from ANS 9.3 Pass2AITone
@@ -141,7 +149,7 @@ export function validateQuality(text: string): { showTellIssues: FixRecord[]; re
 // ============================================================
 
 const TYPO_FIXES: Record<string, string> = {
-  '왠지': '웬지', '몇일': '며칠', '오랫만': '오랜만',
+  '몇일': '며칠', '오랫만': '오랜만',
   '금새': '금세', '어떻해': '어떡해', '되요': '돼요',
   '됬': '됐', '할께': '할게', '있슴': '있음',
   '햇다': '했다', '갔엇다': '갔었다', '봤엇다': '봤었다',
@@ -215,19 +223,25 @@ export function validateStatic(text: string): { fixes: FixRecord[]; issues: Vali
 
 export function validateGeneratedContent(
   text: string,
-  language: AppLanguage
-): { fixes: FixRecord[]; issues: ValidationIssue[] } {
+  language: AppLanguage,
+  config?: StoryConfig
+): { fixes: FixRecord[]; issues: ValidationIssue[]; aiToneScore: number } {
   const allFixes: FixRecord[] = [];
   const allIssues: ValidationIssue[] = [];
+  let aiToneScore = 0;
 
   // Korean-specific validators
   if (language === 'KO') {
     const aiTone = validateAITone(text);
+    aiToneScore = aiTone.score;
     allFixes.push(...aiTone.fixes);
 
     const quality = validateQuality(text);
     allFixes.push(...quality.showTellIssues);
     allFixes.push(...quality.repetitionIssues);
+
+    // DisciplineEngine — 8 anti-pattern rules
+    allIssues.push(...validateDiscipline(text));
   }
 
   // Universal validators
@@ -235,5 +249,46 @@ export function validateGeneratedContent(
   allFixes.push(...staticResult.fixes);
   allIssues.push(...staticResult.issues);
 
-  return { fixes: allFixes, issues: allIssues };
+  // Config-dependent validators
+  if (config) {
+    const currentEpisode = config.episode;
+
+    // ForeshadowingTracker
+    if (config.foreshadowings && config.foreshadowings.length > 0) {
+      allIssues.push(...validateForeshadowings(config.foreshadowings, currentEpisode));
+    }
+
+    // WorldConsistencyEngine
+    if ((config.worldRules && config.worldRules.length > 0) || (config.worldFacts && config.worldFacts.length > 0)) {
+      allIssues.push(...validateWorldConsistency(text, config.worldRules || [], config.worldFacts || [], currentEpisode));
+    }
+
+    // POVManager — only for KO with limited POV types
+    if (language === 'KO' && config.povType && config.povCharacter) {
+      const povType = config.povType;
+      if (povType === POVType.THIRD_LIMITED || povType === POVType.FIRST_PERSON) {
+        allFixes.push(...validatePOV(text, config.povCharacter, povType, config.characters));
+      }
+    }
+
+    // DialogueDNA — validate character dialogue profiles
+    if (language === 'KO' && config.characters.length > 0) {
+      allFixes.push(...validateDialogue(text, config.characters));
+    }
+
+    // EmotionalArcTracker — validate emotional continuity
+    if (config.emotionalHistory && config.emotionalHistory.length > 0 && config.povCharacter) {
+      const currentState = extractEmotionalState(text, config.povCharacter, currentEpisode);
+      allIssues.push(...validateEmotionalArc(config.emotionalHistory, currentState));
+    }
+
+    // CausalityEngine — banned words + EH style lock validation
+    if (config.causalityLevel) {
+      const causalityResult = validateCausality(text, config.causalityLevel, config.ehScore);
+      allFixes.push(...causalityResult.fixes);
+      allIssues.push(...causalityResult.issues);
+    }
+  }
+
+  return { fixes: allFixes, issues: allIssues, aiToneScore };
 }

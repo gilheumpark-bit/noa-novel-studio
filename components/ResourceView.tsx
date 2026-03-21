@@ -1,14 +1,14 @@
 
 import React, { useState, useMemo } from 'react';
-import { Character, StoryConfig, AppLanguage } from '../types';
+import { Character, StoryConfig, AppLanguage, SetConfigFn, CharacterDialogueProfile } from '../types';
 import { TRANSLATIONS } from '../constants';
-import { UserPlus, Trash2, Fingerprint, Sparkles, Loader2, Users, ChevronLeft, ChevronRight, UserCircle, Briefcase, ScrollText, Zap } from 'lucide-react';
-import { generateCharacters } from '../services/geminiService';
+import { UserPlus, Trash2, Fingerprint, Sparkles, Loader2, Users, ChevronLeft, ChevronRight, UserCircle, Briefcase, ScrollText, Zap, ChevronDown, MessageSquare, Plus, X } from 'lucide-react';
+import { generateCharacters } from '../services/aiService';
 
 interface ResourceViewProps {
   language: AppLanguage;
   config: StoryConfig;
-  setConfig: React.Dispatch<React.SetStateAction<StoryConfig>>;
+  setConfig: SetConfigFn;
 }
 
 const ROLE_KEYS = ['hero', 'villain', 'ally', 'extra'] as const;
@@ -17,6 +17,7 @@ const ResourceView: React.FC<ResourceViewProps> = ({ language, config, setConfig
   const [activeCategory, setActiveCategory] = useState('all');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
   const t = TRANSLATIONS[language].resource;
   const te = TRANSLATIONS[language].engine;
 
@@ -267,6 +268,121 @@ const ResourceView: React.FC<ResourceViewProps> = ({ language, config, setConfig
                           <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Narrative Potential</span>
                        </div>
                        <span className="text-[11px] font-mono text-blue-400 font-black">{char.dna}%</span>
+                    </div>
+
+                    {/* Dialogue Profile */}
+                    <div className="mt-4 pt-4 border-t border-zinc-800/50">
+                      <button
+                        onClick={() => setExpandedProfile(expandedProfile === char.id ? null : char.id)}
+                        className="flex items-center gap-2 text-[9px] font-black text-zinc-600 uppercase tracking-widest hover:text-zinc-400 transition-colors w-full"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
+                        <span>{te.dialogueProfile}</span>
+                        <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${expandedProfile === char.id ? 'rotate-180' : ''}`} />
+                        {char.dialogueProfile && <span className="text-blue-500 ml-1">●</span>}
+                      </button>
+                      {expandedProfile === char.id && (
+                        <div className="mt-3 space-y-3">
+                          {/* Sentence Length */}
+                          <div className="space-y-1">
+                            <span className="text-[8px] font-black text-zinc-700 uppercase">{te.dialogueSentenceLen}</span>
+                            <div className="flex gap-1">
+                              {(['short', 'medium', 'long'] as const).map(len => (
+                                <button key={len}
+                                  onClick={() => {
+                                    const profile: CharacterDialogueProfile = char.dialogueProfile || { sentenceLength: 'medium', formality: 0.5, speechPattern: '', quirks: [], endingStyle: '' };
+                                    const updated = config.characters.map(c => c.id === char.id ? { ...c, dialogueProfile: { ...profile, sentenceLength: len } } : c);
+                                    setConfig({ ...config, characters: updated });
+                                  }}
+                                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-black transition-all ${
+                                    (char.dialogueProfile?.sentenceLength || 'medium') === len
+                                      ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                                      : 'bg-black/40 text-zinc-600 border border-zinc-800'
+                                  }`}
+                                >
+                                  {te[`dialogue${len.charAt(0).toUpperCase() + len.slice(1)}` as keyof typeof te] as string}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          {/* Formality Slider */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[8px] font-black text-zinc-700 uppercase">
+                              <span>{te.dialogueFormality}</span>
+                              <span className="text-blue-400">{(char.dialogueProfile?.formality ?? 0.5).toFixed(1)}</span>
+                            </div>
+                            <input type="range" min="0" max="1" step="0.1"
+                              className="w-full accent-blue-600 h-1 bg-zinc-800 rounded-full appearance-none"
+                              value={char.dialogueProfile?.formality ?? 0.5}
+                              onChange={e => {
+                                const profile: CharacterDialogueProfile = char.dialogueProfile || { sentenceLength: 'medium', formality: 0.5, speechPattern: '', quirks: [], endingStyle: '' };
+                                const updated = config.characters.map(c => c.id === char.id ? { ...c, dialogueProfile: { ...profile, formality: parseFloat(e.target.value) } } : c);
+                                setConfig({ ...config, characters: updated });
+                              }}
+                            />
+                          </div>
+                          {/* Speech Pattern */}
+                          <div className="space-y-1">
+                            <span className="text-[8px] font-black text-zinc-700 uppercase">{te.dialogueSpeechPattern}</span>
+                            <input
+                              className="w-full bg-black/50 border border-zinc-800 rounded-lg p-2 text-[10px] focus:border-blue-500 outline-none"
+                              placeholder={language === 'KO' ? '서술형, 명령형, 질문형...' : 'Narrative, imperative, questioning...'}
+                              value={char.dialogueProfile?.speechPattern || ''}
+                              onChange={e => {
+                                const profile: CharacterDialogueProfile = char.dialogueProfile || { sentenceLength: 'medium', formality: 0.5, speechPattern: '', quirks: [], endingStyle: '' };
+                                const updated = config.characters.map(c => c.id === char.id ? { ...c, dialogueProfile: { ...profile, speechPattern: e.target.value } } : c);
+                                setConfig({ ...config, characters: updated });
+                              }}
+                            />
+                          </div>
+                          {/* Ending Style */}
+                          <div className="space-y-1">
+                            <span className="text-[8px] font-black text-zinc-700 uppercase">{te.dialogueEndingStyle}</span>
+                            <input
+                              className="w-full bg-black/50 border border-zinc-800 rounded-lg p-2 text-[10px] focus:border-blue-500 outline-none"
+                              placeholder={language === 'KO' ? '~다, ~어, ~까?' : '~da, ~eo, ~kka?'}
+                              value={char.dialogueProfile?.endingStyle || ''}
+                              onChange={e => {
+                                const profile: CharacterDialogueProfile = char.dialogueProfile || { sentenceLength: 'medium', formality: 0.5, speechPattern: '', quirks: [], endingStyle: '' };
+                                const updated = config.characters.map(c => c.id === char.id ? { ...c, dialogueProfile: { ...profile, endingStyle: e.target.value } } : c);
+                                setConfig({ ...config, characters: updated });
+                              }}
+                            />
+                          </div>
+                          {/* Quirks */}
+                          <div className="space-y-1">
+                            <span className="text-[8px] font-black text-zinc-700 uppercase">{te.dialogueQuirks}</span>
+                            <div className="flex flex-wrap gap-1">
+                              {(char.dialogueProfile?.quirks || []).map((q, qi) => (
+                                <span key={qi} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-full text-[9px] font-bold">
+                                  {q}
+                                  <button onClick={() => {
+                                    const profile = char.dialogueProfile!;
+                                    const quirks = profile.quirks.filter((_, i) => i !== qi);
+                                    const updated = config.characters.map(c => c.id === char.id ? { ...c, dialogueProfile: { ...profile, quirks } } : c);
+                                    setConfig({ ...config, characters: updated });
+                                  }}>
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </span>
+                              ))}
+                              <input
+                                className="bg-transparent text-[9px] outline-none w-20 placeholder-zinc-700"
+                                placeholder="+ Add"
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter' && (e.target as HTMLInputElement).value) {
+                                    const profile: CharacterDialogueProfile = char.dialogueProfile || { sentenceLength: 'medium', formality: 0.5, speechPattern: '', quirks: [], endingStyle: '' };
+                                    const quirks = [...profile.quirks, (e.target as HTMLInputElement).value];
+                                    const updated = config.characters.map(c => c.id === char.id ? { ...c, dialogueProfile: { ...profile, quirks } } : c);
+                                    setConfig({ ...config, characters: updated });
+                                    (e.target as HTMLInputElement).value = '';
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

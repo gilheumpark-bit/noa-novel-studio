@@ -1,4 +1,15 @@
-import { EngineReport, PlatformType, EpisodeState } from './engine/types';
+import { EngineReport, PlatformType, EpisodeState, POVType, Foreshadowing, WorldRule, WorldFact, CharacterDialogueProfile, EmotionalState, EOSHistoryEntry } from './engine/types';
+import type { AgentConfig, MemoryStore, CharacterArcStore, AgentPipelineState } from './engine/agents/types';
+
+export type AIProvider = 'gemini' | 'openai' | 'claude';
+
+export interface AIProviderConfig {
+  provider: AIProvider;
+  apiKey: string;
+  model: string;
+}
+
+export type SetConfigFn = (config: StoryConfig | ((prev: StoryConfig) => StoryConfig)) => void;
 
 export enum Genre {
   SF = "SF",
@@ -10,11 +21,59 @@ export enum Genre {
   FANTASY_ROMANCE = "FANTASY_ROMANCE"
 }
 
+export type CausalityLevel = 1 | 2 | 3 | 4 | 5;
+
 export type GenerationMode = 'cloud' | 'local';
 export type ViewMode = 'mobile' | 'desktop';
 export type AppLanguage = 'KO' | 'EN' | 'JP' | 'CN';
 
-export type AppTab = 'world' | 'writing' | 'history' | 'critique' | 'settings' | 'characters' | 'rulebook';
+export type AppTab = 'world' | 'simulator' | 'directing' | 'brainstorm' | 'outline' | 'writing' | 'history' | 'critique' | 'settings' | 'characters' | 'rulebook';
+
+// ============================================================
+// Scene Sheet / Directing Types
+// ============================================================
+
+export type BeatType = 'goguma' | 'cider' | 'dopamine' | 'hook' | 'tension' | 'breather';
+
+export interface SceneBeat {
+  id: string;
+  type: BeatType;
+  description: string;
+  /** 0-100 intensity */
+  intensity: number;
+}
+
+export interface SceneEntry {
+  id: string;
+  sceneNumber: number;
+  title: string;
+  location: string;
+  characters: string[];
+  /** Directing / mood note */
+  mood: string;
+  /** Emotional target for the scene */
+  emotion: string;
+  /** Beats within this scene */
+  beats: SceneBeat[];
+  /** Character dialogue notes for this scene */
+  dialogueNotes: SceneDialogueNote[];
+}
+
+export interface SceneDialogueNote {
+  characterName: string;
+  note: string;
+}
+
+export interface EpisodeDirecting {
+  episode: number;
+  scenes: SceneEntry[];
+  /** Episode-level hook (opening) */
+  openingHook: string;
+  /** Episode-level cliffhanger (ending) */
+  endingHook: string;
+  /** Overall episode mood/atmosphere direction */
+  overallMood: string;
+}
 
 export interface PclGuardrails {
   min: number;
@@ -28,6 +87,7 @@ export interface Character {
   traits: string;
   appearance: string;
   dna: number;
+  dialogueProfile?: CharacterDialogueProfile;
 }
 
 export interface StoryConfig {
@@ -43,6 +103,25 @@ export interface StoryConfig {
   characters: Character[];
   platform: PlatformType;
   episodeState?: EpisodeState;
+  povType?: POVType;
+  foreshadowings?: Foreshadowing[];
+  worldRules?: WorldRule[];
+  worldFacts?: WorldFact[];
+  emotionalHistory?: EmotionalState[];
+  eosHistory?: EOSHistoryEntry[];
+  causalityLevel?: CausalityLevel;
+  /** EH score tracker for Level 5 (0-100, starts at 100) */
+  ehScore?: number;
+  /** Episode directing / scene sheet */
+  episodeDirecting?: EpisodeDirecting;
+  // Agent system — internal, not serialized
+  _agentSignal?: AbortSignal;
+}
+
+export interface SessionAgentData {
+  agentConfig: AgentConfig;
+  memoryStore: MemoryStore;
+  arcStore: CharacterArcStore;
 }
 
 export interface Message {
@@ -78,5 +157,7 @@ export interface EngineStatus {
   platform: PlatformType;
 }
 
-export { PlatformType, EpisodeState } from './engine/types';
-export type { EngineReport } from './engine/types';
+export { PlatformType, EpisodeState, POVType } from './engine/types';
+export type { EngineReport, Foreshadowing, WorldRule, WorldFact, CharacterDialogueProfile, EmotionalState, EOSHistoryEntry } from './engine/types';
+export type { AgentConfig, MemoryStore, CharacterArcStore, AgentPipelineState } from './engine/agents/types';
+export { AgentRole, AgentStatus, DEFAULT_AGENT_CONFIG, EMPTY_MEMORY_STORE, EMPTY_ARC_STORE, createEmptyPipelineState } from './engine/agents/types';

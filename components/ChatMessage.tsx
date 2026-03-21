@@ -11,6 +11,7 @@ interface ChatMessageProps {
 }
 
 const ChatMessage: React.FC<ChatMessageProps> = ({ message, language = 'KO', onRegenerate }) => {
+  const [copied, setCopied] = React.useState(false);
   const isUser = message.role === 'user';
 
   // Try structured EngineReport first, fall back to JSON regex extraction
@@ -120,8 +121,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, language = 'KO', onR
         {!isUser && (
           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
             <button
-              onClick={() => navigator.clipboard.writeText(message.content)}
-              className="p-1.5 hover:bg-zinc-900 rounded-lg text-zinc-700 hover:text-zinc-400 transition-all"
+              onClick={() => {
+                navigator.clipboard.writeText(message.content)
+                  .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })
+                  .catch(() => { /* clipboard permission denied */ });
+              }}
+              className={`p-1.5 hover:bg-zinc-900 rounded-lg transition-all ${copied ? 'text-green-400' : 'text-zinc-700 hover:text-zinc-400'}`}
             >
               <Copy className="w-3.5 h-3.5" />
             </button>

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { AppLanguage, PlatformType } from '../types';
 import { ENGINE_VERSION } from '../constants';
+import { getStoredProvider, getStoredModel, PROVIDER_LABELS } from '../services/aiService';
 import {
   User, Shield, Cpu, Trash2,
   ChevronRight, Zap, Bell, Key, Monitor, Smartphone, Hash, Thermometer
@@ -25,8 +26,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
   const l = LABELS[language];
   const [notificationsOn, setNotificationsOn] = useState(true);
   const [defaultPlatform, setDefaultPlatform] = useState<string>(() => localStorage.getItem('noa_default_platform') || 'MOBILE');
-  const [defaultEpisodes, setDefaultEpisodes] = useState<number>(() => parseInt(localStorage.getItem('noa_default_episodes') || '25'));
-  const [temperature, setTemperature] = useState<number>(() => parseFloat(localStorage.getItem('noa_temperature') || '0.7'));
+  const [defaultEpisodes, setDefaultEpisodes] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('noa_default_episodes') || '25', 10);
+    return Number.isNaN(v) ? 25 : v;
+  });
+  const [temperature, setTemperature] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem('noa_temperature') || '0.7');
+    return Number.isNaN(v) ? 0.7 : v;
+  });
 
   return (
     <div className="max-w-4xl mx-auto p-6 md:p-10 space-y-12 animate-in fade-in duration-500 pb-32">
@@ -66,8 +73,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
               <span className="text-xs font-black text-blue-400">ANS {ENGINE_VERSION}</span>
             </div>
             <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-zinc-800">
+              <span className="text-xs text-zinc-400">{isKO ? "AI 프로바이더" : "AI Provider"}</span>
+              <span className="text-xs font-black text-white">{PROVIDER_LABELS[getStoredProvider()]}</span>
+            </div>
+            <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-zinc-800">
               <span className="text-xs text-zinc-400">{isKO ? "AI 모델" : "AI Model"}</span>
-              <span className="text-xs font-black text-white">Gemini 2.5 Flash</span>
+              <span className="text-xs font-black text-white truncate max-w-[200px]">{getStoredModel(getStoredProvider())}</span>
             </div>
             <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-zinc-800">
               <span className="text-xs text-zinc-400">{isKO ? "지연 시간" : "Latency"}</span>
@@ -91,11 +102,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
                 <div className="p-3 bg-zinc-900 rounded-2xl"><Key className="w-5 h-5 text-zinc-500" /></div>
                 <div>
                   <div className="text-sm font-bold">{isKO ? "API 키 관리" : "API Key Management"}</div>
-                  <div className="text-[11px] text-zinc-500 hidden sm:block">{isKO ? "Gemini API 키를 설정하고 관리합니다." : "Configure and manage your Gemini API key."}</div>
+                  <div className="text-[11px] text-zinc-500 hidden sm:block">{isKO ? "AI API 키를 설정하고 관리합니다." : "Configure and manage your AI API keys."}</div>
                 </div>
               </div>
               <div className="text-[10px] font-black text-blue-500 uppercase shrink-0 ml-2">
-                {localStorage.getItem('noa_api_key') ? (isKO ? '설정됨' : 'Set') : (isKO ? '미설정' : 'Not Set')}
+                {sessionStorage.getItem('noa_api_key_gemini') || sessionStorage.getItem('noa_api_key_openai') || sessionStorage.getItem('noa_api_key_claude') ? (isKO ? '설정됨' : 'Set') : (isKO ? '미설정' : 'Not Set')}
               </div>
             </div>
 
@@ -175,7 +186,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ language, onClearAll, onMan
                 min={1}
                 max={200}
                 value={defaultEpisodes}
-                onChange={e => { const v = parseInt(e.target.value) || 25; setDefaultEpisodes(v); localStorage.setItem('noa_default_episodes', String(v)); }}
+                onChange={e => { const v = Math.max(1, Math.min(200, parseInt(e.target.value) || 25)); setDefaultEpisodes(v); localStorage.setItem('noa_default_episodes', String(v)); }}
                 className="w-20 bg-black/50 border border-zinc-800 rounded-xl px-3 py-2 text-sm font-black text-center text-blue-400 focus:border-blue-500 outline-none"
               />
             </div>

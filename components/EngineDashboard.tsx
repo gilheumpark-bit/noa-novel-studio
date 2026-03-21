@@ -1,21 +1,52 @@
 
-import React from 'react';
-import { Activity, Zap, Database, ShieldCheck, AlertCircle, Cpu, BarChart3 } from 'lucide-react';
-import { StoryConfig, AppLanguage } from '../types';
+import React, { useMemo } from 'react';
+import { Activity, Zap, Database, ShieldCheck, AlertCircle, Cpu, BarChart3, Heart } from 'lucide-react';
+import { StoryConfig, AppLanguage, AgentConfig, AgentPipelineState, DEFAULT_AGENT_CONFIG } from '../types';
 import { EngineReport, PlatformType } from '../engine/types';
 import { generateTensionCurveData } from '../engine/models';
-import { ENGINE_VERSION } from '../constants';
+import { ENGINE_VERSION, TRANSLATIONS } from '../constants';
+import AgentPanel from './AgentPanel';
 
 interface EngineDashboardProps {
   config: StoryConfig;
   report: EngineReport | null;
   isGenerating: boolean;
   language: AppLanguage;
+  agentConfig?: AgentConfig;
+  agentPipelineState?: AgentPipelineState | null;
+  onAgentConfigChange?: (config: AgentConfig) => void;
 }
 
-const EngineDashboard: React.FC<EngineDashboardProps> = ({ config, report, isGenerating, language }) => {
+const EMOTION_COLORS: Record<string, string> = {
+  '공포': 'bg-purple-500', '분노': 'bg-red-500', '슬픔': 'bg-blue-500',
+  '기쁨': 'bg-yellow-500', '사랑': 'bg-pink-500', '긴장': 'bg-orange-500',
+  '호기심': 'bg-cyan-500', '절망': 'bg-zinc-500',
+};
+
+const EngineDashboard: React.FC<EngineDashboardProps> = ({ config, report, isGenerating, language, agentConfig, agentPipelineState, onAgentConfigChange }) => {
   const totalEpisodes = config.totalEpisodes ?? 25;
-  const tensionData = generateTensionCurveData(totalEpisodes, config.genre);
+  const tensionData = useMemo(() => generateTensionCurveData(totalEpisodes, config.genre), [totalEpisodes, config.genre]);
+  const te = TRANSLATIONS[language].engine;
+
+  // Group emotional history by character, get latest per character with top 3 emotions
+  const emotionSummary = useMemo(() => {
+    const history = config.emotionalHistory || [];
+    if (history.length === 0) return [];
+    const byChar: Record<string, typeof history> = {};
+    for (const s of history) {
+      if (!byChar[s.character]) byChar[s.character] = [];
+      byChar[s.character].push(s);
+    }
+    return Object.entries(byChar).map(([name, states]) => {
+      const sorted = [...states].sort((a, b) => a.episode - b.episode);
+      const latest = sorted[sorted.length - 1];
+      const topEmotions = Object.entries(latest.emotions)
+        .filter(([, v]) => v > 0.05)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3);
+      return { name, topEmotions, episodes: sorted.slice(-5) };
+    });
+  }, [config.emotionalHistory]);
 
   return (
     <div className="h-full bg-zinc-950 border-l border-zinc-800 flex flex-col w-80 text-xs font-mono overflow-y-auto custom-scrollbar">
@@ -174,6 +205,47 @@ const EngineDashboard: React.FC<EngineDashboardProps> = ({ config, report, isGen
                 {report.processingTimeMs}ms
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Emotional Arc */}
+        {emotionSummary.length > 0 && (
+          <div className="space-y-3">
+            <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-2">
+              <Heart className="w-3 h-3" /> {te.emotionalArc}
+            </div>
+            <div className="bg-zinc-900/50 rounded-2xl p-4 border border-zinc-800/50 space-y-4">
+              {emotionSummary.map(({ name, topEmotions }) => (
+                <div key={name} className="space-y-2">
+                  <div className="text-[9px] font-black text-zinc-400">{name}</div>
+                  {topEmotions.map(([emotion, value]) => (
+                    <div key={emotion} className="space-y-0.5">
+                      <div className="flex justify-between text-[7px] font-bold text-zinc-600">
+                        <span>{emotion}</span>
+                        <span>{(value as number).toFixed(2)}</span>
+                      </div>
+                      <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${EMOTION_COLORS[emotion] || 'bg-blue-500'}`}
+                          style={{ width: `${Math.round((value as number) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Agent Panel */}
+        {onAgentConfigChange && (
+          <div className="space-y-3">
+            <AgentPanel
+              language={language}
+              agentConfig={agentConfig ?? DEFAULT_AGENT_CONFIG}
+              pipelineState={agentPipelineState ?? null}
+              onConfigChange={onAgentConfigChange}
+            />
           </div>
         )}
       </div>
