@@ -88,6 +88,8 @@ export const TRANSLATIONS: Record<AppLanguage, any> = {
       characterName: "캐릭터명",
       dialogueNotePlaceholder: "이 씬에서 이 캐릭터의 말투/핵심 대사...",
       beatFlow: "비트 플로우",
+      autoGenerate: "AI 자동 생성",
+      plotPresets: "대표 플롯 구조",
     },
     writing: {
       ready: "신경 인터페이스 연결됨",
@@ -402,6 +404,8 @@ export const TRANSLATIONS: Record<AppLanguage, any> = {
       characterName: "Character",
       dialogueNotePlaceholder: "Speech style / key line for this scene...",
       beatFlow: "Beat Flow",
+      autoGenerate: "AI Auto-Generate",
+      plotPresets: "Plot Structures",
     },
     writing: {
       ready: "Neural Interface Connected",
@@ -716,6 +720,8 @@ export const TRANSLATIONS: Record<AppLanguage, any> = {
       characterName: "キャラクター",
       dialogueNotePlaceholder: "このシーンでの話し方/キーセリフ...",
       beatFlow: "ビートフロー",
+      autoGenerate: "AI自動生成",
+      plotPresets: "代表プロット構造",
     },
     writing: {
       ready: "ニューラルインターフェース接続済み",
@@ -1030,6 +1036,8 @@ export const TRANSLATIONS: Record<AppLanguage, any> = {
       characterName: "角色",
       dialogueNotePlaceholder: "此场景中的说话方式/关键台词...",
       beatFlow: "节拍流",
+      autoGenerate: "AI自动生成",
+      plotPresets: "代表剧情结构",
     },
     writing: {
       ready: "神经接口已连接",

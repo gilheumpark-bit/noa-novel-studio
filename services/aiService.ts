@@ -565,6 +565,96 @@ export async function generateCharacters(
 }
 
 // ============================================================
+// Public API: generateScenes (Auto Scene Sheet)
+// ============================================================
+
+export async function generateScenes(
+  config: StoryConfig,
+  language: AppLanguage = 'KO'
+): Promise<any[]> {
+  const { provider, apiKey, model } = getCurrentProviderConfig();
+  if (!apiKey) throw new Error("API_KEY_INVALID");
+
+  const langNames: Record<AppLanguage, string> = {
+    'KO': 'Korean', 'EN': 'English', 'JP': 'Japanese', 'CN': 'Chinese'
+  };
+
+  const characterInfo = config.characters.length > 0
+    ? config.characters.map(c => `${c.name}(${c.role}): ${c.traits}`).join('\n')
+    : 'No characters registered';
+
+  const prompt = `You are an expert story director/screenwriter.
+
+Based on the following story setup, generate a detailed scene sheet for Episode ${config.episode} (of ${config.totalEpisodes} total).
+
+[STORY INFO]
+- Title: ${config.title}
+- Genre: ${config.genre}
+- Synopsis: ${config.synopsis || 'Not provided'}
+- POV Character: ${config.povCharacter}
+- Setting: ${config.setting}
+- Core Emotion: ${config.primaryEmotion}
+- Characters:
+${characterInfo}
+
+[REQUIREMENTS]
+Generate 4-6 scenes for this episode. Each scene must include:
+- title: scene name
+- location: where it happens
+- characters: array of character names present
+- mood: atmosphere/directing notes (lighting, sounds, pacing)
+- emotion: emotional journey in this scene (e.g., "불안 → 공포 → 안도")
+- beats: array of emotional beats, each with:
+  - type: one of "goguma" (frustration/stuffy), "cider" (relief/satisfying), "dopamine" (reward/pleasure), "hook" (attention grabber), "tension" (suspense), "breather" (calm/rest)
+  - description: what happens
+  - intensity: 0-100
+- dialogueNotes: array of character-specific notes, each with:
+  - characterName: who
+  - note: how they speak / key lines in this scene
+
+Also provide:
+- openingHook: how to grab the reader from line 1
+- endingHook: cliffhanger for next episode
+- overallMood: episode-level atmosphere
+
+IMPORTANT: All text MUST be in ${langNames[language]}.
+Return valid JSON with this structure:
+{
+  "openingHook": "...",
+  "endingHook": "...",
+  "overallMood": "...",
+  "scenes": [ { title, location, characters, mood, emotion, beats: [{type, description, intensity}], dialogueNotes: [{characterName, note}] } ]
+}`;
+
+  let results: any;
+
+  try {
+    switch (provider) {
+      case 'gemini':
+        results = await generateJSONGemini(apiKey, model, prompt);
+        break;
+      case 'openai':
+        results = await generateJSONOpenAI(apiKey, model, prompt);
+        break;
+      case 'claude':
+        results = await generateJSONClaude(apiKey, model, prompt);
+        break;
+      default:
+        throw new Error(`Unknown AI provider: ${provider}`);
+    }
+  } catch (error) {
+    console.error("Scene Generation Error:", error);
+    throw error;
+  }
+
+  // Results might be an array (scenes only) or an object with scenes
+  if (Array.isArray(results)) {
+    return results;
+  }
+  return results;
+}
+
+// ============================================================
 // Public API: testApiKey
 // ============================================================
 

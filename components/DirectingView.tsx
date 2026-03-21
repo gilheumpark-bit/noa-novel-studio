@@ -5,9 +5,11 @@ import {
   SceneEntry, SceneBeat, SceneDialogueNote, BeatType, EpisodeDirecting,
 } from '../types';
 import { TRANSLATIONS } from '../constants';
+import { generateScenes } from '../services/aiService';
 import {
   Plus, Trash2, ChevronDown, ChevronRight, Film, Flame, Heart,
   Cookie, Zap, Anchor, Wind, MessageSquare, Clapperboard, Sparkles,
+  Wand2, Loader2, BookOpen,
 } from 'lucide-react';
 
 interface DirectingViewProps {
@@ -52,10 +54,179 @@ function createEmptyDirecting(episode: number): EpisodeDirecting {
   };
 }
 
+// ============================================================
+// Plot Presets — 대표 플롯 구조
+// ============================================================
+
+interface PlotPreset {
+  id: string;
+  name: Record<AppLanguage, string>;
+  description: Record<AppLanguage, string>;
+  generate: (episode: number) => EpisodeDirecting;
+}
+
+const uid = () => `sc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+const bid = () => `bt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+const PLOT_PRESETS: PlotPreset[] = [
+  {
+    id: 'kishotenketsu',
+    name: { KO: '기승전결', EN: 'Kishōtenketsu', JP: '起承転結', CN: '起承转合' },
+    description: { KO: '기(도입) → 승(전개) → 전(전환/반전) → 결(결말)', EN: 'Intro → Development → Twist → Conclusion', JP: '起→承→転→結', CN: '起→承→转→合' },
+    generate: (ep) => ({
+      episode: ep, openingHook: '', endingHook: '', overallMood: '',
+      scenes: [
+        { id: uid(), sceneNumber: 1, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [{ id: bid(), type: 'hook', description: '', intensity: 60 }],
+          dialogueNotes: [] },
+        { id: uid(), sceneNumber: 2, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'tension', description: '', intensity: 50 },
+            { id: bid(), type: 'goguma', description: '', intensity: 40 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 3, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'hook', description: '', intensity: 90 },
+            { id: bid(), type: 'dopamine', description: '', intensity: 70 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 4, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'cider', description: '', intensity: 80 },
+            { id: bid(), type: 'breather', description: '', intensity: 50 },
+          ], dialogueNotes: [] },
+      ],
+    }),
+  },
+  {
+    id: 'tension-release',
+    name: { KO: '고구마→사이다', EN: 'Frustration→Relief', JP: '焦り→爽快', CN: '焦虑→爽快' },
+    description: { KO: '답답함을 극한까지 쌓고 한 방에 해소', EN: 'Build max frustration then explosive relief', JP: 'フラストレーション蓄積→一気に解放', CN: '积累到极限后一次性释放' },
+    generate: (ep) => ({
+      episode: ep, openingHook: '', endingHook: '', overallMood: '',
+      scenes: [
+        { id: uid(), sceneNumber: 1, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [{ id: bid(), type: 'goguma', description: '', intensity: 40 }],
+          dialogueNotes: [] },
+        { id: uid(), sceneNumber: 2, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'goguma', description: '', intensity: 65 },
+            { id: bid(), type: 'tension', description: '', intensity: 70 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 3, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'goguma', description: '', intensity: 90 },
+            { id: bid(), type: 'tension', description: '', intensity: 95 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 4, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'cider', description: '', intensity: 100 },
+            { id: bid(), type: 'dopamine', description: '', intensity: 90 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 5, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [{ id: bid(), type: 'breather', description: '', intensity: 40 }],
+          dialogueNotes: [] },
+      ],
+    }),
+  },
+  {
+    id: 'cliffhanger',
+    name: { KO: '훅 폭격', EN: 'Hook Barrage', JP: 'フック連打', CN: '钩子轰炸' },
+    description: { KO: '씬마다 훅을 심어 이탈 불가 구조', EN: 'Plant hooks in every scene — zero escape', JP: '毎シーンにフック→離脱不可構造', CN: '每场景埋钩子，不可能离开' },
+    generate: (ep) => ({
+      episode: ep, openingHook: '', endingHook: '', overallMood: '',
+      scenes: [
+        { id: uid(), sceneNumber: 1, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'hook', description: '', intensity: 80 },
+            { id: bid(), type: 'tension', description: '', intensity: 60 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 2, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'dopamine', description: '', intensity: 50 },
+            { id: bid(), type: 'hook', description: '', intensity: 85 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 3, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'goguma', description: '', intensity: 70 },
+            { id: bid(), type: 'hook', description: '', intensity: 90 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 4, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'tension', description: '', intensity: 95 },
+            { id: bid(), type: 'hook', description: '', intensity: 100 },
+          ], dialogueNotes: [] },
+      ],
+    }),
+  },
+  {
+    id: 'emotional-roller',
+    name: { KO: '감정 롤러코스터', EN: 'Emotional Roller', JP: '感情ジェットコースター', CN: '情感过山车' },
+    description: { KO: '감정 진폭 극대화 — 웃다가 울다가', EN: 'Max emotional amplitude — laugh then cry', JP: '感情振幅最大化 — 笑って泣いて', CN: '情感振幅最大化 — 笑着哭着' },
+    generate: (ep) => ({
+      episode: ep, openingHook: '', endingHook: '', overallMood: '',
+      scenes: [
+        { id: uid(), sceneNumber: 1, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [{ id: bid(), type: 'dopamine', description: '', intensity: 70 }],
+          dialogueNotes: [] },
+        { id: uid(), sceneNumber: 2, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'breather', description: '', intensity: 60 },
+            { id: bid(), type: 'goguma', description: '', intensity: 80 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 3, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'tension', description: '', intensity: 90 },
+            { id: bid(), type: 'cider', description: '', intensity: 85 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 4, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'goguma', description: '', intensity: 95 },
+            { id: bid(), type: 'dopamine', description: '', intensity: 100 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 5, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [{ id: bid(), type: 'breather', description: '', intensity: 30 }],
+          dialogueNotes: [] },
+      ],
+    }),
+  },
+  {
+    id: 'slow-burn',
+    name: { KO: '슬로우번', EN: 'Slow Burn', JP: 'スローバーン', CN: '慢燃' },
+    description: { KO: '조용한 일상 속 서서히 쌓이는 불안', EN: 'Quiet daily life with creeping dread', JP: '静かな日常に忍び寄る不安', CN: '平静日常中缓缓积累的不安' },
+    generate: (ep) => ({
+      episode: ep, openingHook: '', endingHook: '', overallMood: '',
+      scenes: [
+        { id: uid(), sceneNumber: 1, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [{ id: bid(), type: 'breather', description: '', intensity: 30 }],
+          dialogueNotes: [] },
+        { id: uid(), sceneNumber: 2, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [{ id: bid(), type: 'tension', description: '', intensity: 25 }],
+          dialogueNotes: [] },
+        { id: uid(), sceneNumber: 3, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'breather', description: '', intensity: 40 },
+            { id: bid(), type: 'goguma', description: '', intensity: 35 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 4, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'tension', description: '', intensity: 55 },
+            { id: bid(), type: 'goguma', description: '', intensity: 50 },
+          ], dialogueNotes: [] },
+        { id: uid(), sceneNumber: 5, title: '', location: '', characters: [], mood: '', emotion: '',
+          beats: [
+            { id: bid(), type: 'hook', description: '', intensity: 85 },
+            { id: bid(), type: 'tension', description: '', intensity: 80 },
+          ], dialogueNotes: [] },
+      ],
+    }),
+  },
+];
+
 const DirectingView: React.FC<DirectingViewProps> = ({ language, config, setConfig }) => {
   const t = TRANSLATIONS[language].directing;
   const [expandedScenes, setExpandedScenes] = useState<Set<string>>(new Set());
   const [formResetKey, setFormResetKey] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const directing = config.episodeDirecting ?? createEmptyDirecting(config.episode);
 
@@ -130,6 +301,55 @@ const DirectingView: React.FC<DirectingViewProps> = ({ language, config, setConf
     updateScene(sceneId, { dialogueNotes: scene.dialogueNotes.filter((_, i) => i !== idx) });
   };
 
+  const applyPreset = (preset: PlotPreset) => {
+    const newDirecting = preset.generate(config.episode);
+    setConfig({ ...config, episodeDirecting: newDirecting });
+    // Expand all scenes
+    setExpandedScenes(new Set(newDirecting.scenes.map(s => s.id)));
+  };
+
+  const handleAutoGenerate = async () => {
+    if (isGenerating) return;
+    setIsGenerating(true);
+    try {
+      const result = await generateScenes(config, language);
+      // Parse the result — it might be the full directing object or just scenes array
+      const scenes: SceneEntry[] = (result.scenes || result || []).map((s: any, i: number) => ({
+        id: uid(),
+        sceneNumber: i + 1,
+        title: s.title || '',
+        location: s.location || '',
+        characters: Array.isArray(s.characters) ? s.characters : [],
+        mood: s.mood || '',
+        emotion: s.emotion || '',
+        beats: (s.beats || []).map((b: any) => ({
+          id: bid(),
+          type: BEAT_TYPES.includes(b.type) ? b.type : 'tension',
+          description: b.description || '',
+          intensity: typeof b.intensity === 'number' ? b.intensity : 50,
+        })),
+        dialogueNotes: (s.dialogueNotes || []).map((d: any) => ({
+          characterName: d.characterName || '',
+          note: d.note || '',
+        })),
+      }));
+
+      const newDirecting: EpisodeDirecting = {
+        episode: config.episode,
+        scenes,
+        openingHook: result.openingHook || '',
+        endingHook: result.endingHook || '',
+        overallMood: result.overallMood || '',
+      };
+      setConfig({ ...config, episodeDirecting: newDirecting });
+      setExpandedScenes(new Set(scenes.map(s => s.id)));
+    } catch (error) {
+      console.error('Scene auto-generation failed:', error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // Beat summary for the episode
   const beatSummary = BEAT_TYPES.map(type => ({
     type,
@@ -144,8 +364,38 @@ const DirectingView: React.FC<DirectingViewProps> = ({ language, config, setConf
           <h2 className="text-2xl md:text-3xl font-black tracking-tighter uppercase">{t.title}</h2>
           <p className="text-zinc-600 text-[10px] font-bold tracking-widest uppercase">{t.subtitle}</p>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-black text-zinc-600">
-          <Film className="w-3.5 h-3.5" /> EP.{config.episode}
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-black text-zinc-600 flex items-center gap-1">
+            <Film className="w-3.5 h-3.5" /> EP.{config.episode}
+          </span>
+          <button
+            onClick={handleAutoGenerate}
+            disabled={isGenerating}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 border border-blue-500 rounded-xl text-[10px] font-black text-white hover:bg-blue-500 transition-all uppercase tracking-widest disabled:opacity-50 shrink-0"
+          >
+            {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+            {t.autoGenerate}
+          </button>
+        </div>
+      </div>
+
+      {/* Plot Presets */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-3.5 h-3.5 text-zinc-600" />
+          <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{t.plotPresets}</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {PLOT_PRESETS.map(preset => (
+            <button
+              key={preset.id}
+              onClick={() => applyPreset(preset)}
+              className="flex flex-col items-start gap-1 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl text-left hover:border-zinc-600 hover:bg-zinc-900/50 transition-all"
+            >
+              <span className="text-[10px] font-black text-zinc-300">{preset.name[language]}</span>
+              <span className="text-[8px] text-zinc-600 leading-tight">{preset.description[language]}</span>
+            </button>
+          ))}
         </div>
       </div>
 
