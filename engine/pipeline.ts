@@ -8,6 +8,7 @@ import { buildForeshadowingDirective } from './foreshadowing';
 import { buildWorldDirective } from './worldConsistency';
 import { buildDialogueDirective } from './dialogueDNA';
 import { buildEmotionalContext } from './emotionalArc';
+import { buildCausalityDirective } from './causalityEngine';
 
 // ============================================================
 // Dynamic System Instruction Builder
@@ -85,7 +86,12 @@ export function buildSystemInstruction(
   const dialogueDir = buildDialogueDirective(config.characters);
   const emotionalDir = buildEmotionalContext(config.emotionalHistory || [], config.characters, config.episode);
 
-  const ans95Sections = [eosFeedback, foreshadowingDir, worldDir, dialogueDir, emotionalDir]
+  // Causality Engine directive (if level is set)
+  const causalityDir = config.causalityLevel
+    ? buildCausalityDirective(config.causalityLevel, config.ehScore, isKO)
+    : '';
+
+  const ans95Sections = [causalityDir, eosFeedback, foreshadowingDir, worldDir, dialogueDir, emotionalDir]
     .filter(s => s.length > 0)
     .join('\n\n');
 

@@ -21,6 +21,8 @@ export enum Genre {
   FANTASY_ROMANCE = "FANTASY_ROMANCE"
 }
 
+export type CausalityLevel = 1 | 2 | 3 | 4 | 5;
+
 export type GenerationMode = 'cloud' | 'local';
 export type ViewMode = 'mobile' | 'desktop';
 export type AppLanguage = 'KO' | 'EN' | 'JP' | 'CN';
@@ -61,6 +63,9 @@ export interface StoryConfig {
   worldFacts?: WorldFact[];
   emotionalHistory?: EmotionalState[];
   eosHistory?: EOSHistoryEntry[];
+  causalityLevel?: CausalityLevel;
+  /** EH score tracker for Level 5 (0-100, starts at 100) */
+  ehScore?: number;
   // Agent system — internal, not serialized
   _agentSignal?: AbortSignal;
 }

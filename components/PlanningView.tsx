@@ -1,9 +1,10 @@
 
 import React, { useMemo, useState } from 'react';
-import { StoryConfig, Genre, AppLanguage, PlatformType, SetConfigFn, Foreshadowing, WorldRule, WorldFact } from '../types';
+import { StoryConfig, Genre, AppLanguage, PlatformType, SetConfigFn, Foreshadowing, WorldRule, WorldFact, CausalityLevel } from '../types';
 import { POVType } from '../engine/types';
 import { TRANSLATIONS, GENRE_LABELS } from '../constants';
-import { Sparkles, BarChart3, Wand2, Monitor, Smartphone, ChevronDown, ChevronRight, Plus, Trash2, Check, AlertTriangle, Clock } from 'lucide-react';
+import { getCausalityLevelDef, getEHStyleLock } from '../engine/causalityEngine';
+import { Sparkles, BarChart3, Wand2, Monitor, Smartphone, ChevronDown, ChevronRight, Plus, Trash2, Check, AlertTriangle, Clock, Shield, Zap } from 'lucide-react';
 import { generateTensionCurveData } from '../engine/models';
 
 interface PlanningViewProps {
@@ -228,6 +229,99 @@ const PlanningView: React.FC<PlanningViewProps> = ({ language, config, setConfig
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Causality Engine Level Selector */}
+      <div className="bg-zinc-900/20 border border-zinc-800 rounded-3xl md:rounded-[2.5rem] p-6 md:p-10 space-y-6">
+        <div className="flex items-center gap-3">
+          <Shield className="w-4 h-4 text-orange-500" />
+          <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{te.causalityLevel}</h3>
+        </div>
+        <p className="text-[10px] text-zinc-600">{te.causalityLevelDesc}</p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          {/* Off option */}
+          <button
+            onClick={() => setConfig({ ...config, causalityLevel: undefined, ehScore: undefined })}
+            className={`flex flex-col items-center gap-1.5 py-4 px-2 rounded-xl border text-center transition-all ${
+              !config.causalityLevel
+                ? 'bg-zinc-800/50 border-zinc-600 text-zinc-300'
+                : 'bg-black border-zinc-800 text-zinc-700 hover:text-zinc-400'
+            }`}
+          >
+            <span className="text-[10px] font-black uppercase tracking-wider">{te.causalityOff}</span>
+          </button>
+          {/* Level buttons */}
+          {([1, 2, 3, 4, 5] as CausalityLevel[]).map(lv => {
+            const labels = [te.causalityL1, te.causalityL2, te.causalityL3, te.causalityL4, te.causalityL5];
+            const descs = [te.causalityL1Desc, te.causalityL2Desc, te.causalityL3Desc, te.causalityL4Desc, te.causalityL5Desc];
+            const colors = [
+              'border-green-500/30 bg-green-600/10 text-green-400',
+              'border-blue-500/30 bg-blue-600/10 text-blue-400',
+              'border-yellow-500/30 bg-yellow-600/10 text-yellow-400',
+              'border-red-500/30 bg-red-600/10 text-red-400',
+              'border-purple-500/30 bg-purple-600/10 text-purple-400',
+            ];
+            const isActive = config.causalityLevel === lv;
+            return (
+              <button
+                key={lv}
+                onClick={() => setConfig({ ...config, causalityLevel: lv, ehScore: lv === 5 ? (config.ehScore ?? 100) : undefined })}
+                className={`flex flex-col items-center gap-1.5 py-4 px-2 rounded-xl border text-center transition-all ${
+                  isActive ? colors[lv - 1] : 'bg-black border-zinc-800 text-zinc-700 hover:text-zinc-400'
+                }`}
+              >
+                <span className="text-[10px] font-black uppercase tracking-wider">{labels[lv - 1]}</span>
+                <span className="text-[8px] text-zinc-600 leading-tight">{descs[lv - 1]}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Level 5 EH Score slider */}
+        {config.causalityLevel === 5 && (
+          <div className="space-y-3 pt-4 border-t border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5 text-purple-400" />
+                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{te.causalityEHScore}</span>
+              </div>
+              <span className={`text-sm font-black ${
+                (config.ehScore ?? 100) >= 50 ? 'text-green-400' :
+                (config.ehScore ?? 100) >= 35 ? 'text-yellow-400' :
+                (config.ehScore ?? 100) >= 10 ? 'text-red-400' : 'text-purple-400'
+              }`}>{(config.ehScore ?? 100).toFixed(1)}p</span>
+            </div>
+            <input
+              type="range" min="0" max="100" step="0.5"
+              className="w-full accent-purple-600 h-1.5 bg-zinc-800 rounded-full appearance-none"
+              value={config.ehScore ?? 100}
+              onChange={e => setConfig({ ...config, ehScore: parseFloat(e.target.value) })}
+            />
+            <div className="flex justify-between text-[8px] text-zinc-700">
+              <span>0p (CRASH)</span>
+              <span>{getEHStyleLock(config.ehScore ?? 100).styleLabel[language === 'KO' ? 'KO' : 'EN']}</span>
+              <span>100p</span>
+            </div>
+          </div>
+        )}
+
+        {/* Active level summary */}
+        {config.causalityLevel && config.causalityLevel >= 3 && (
+          <div className="bg-black/40 rounded-xl border border-zinc-800/50 p-4 space-y-2">
+            <div className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{te.causalityCostGrades}</div>
+            {getCausalityLevelDef(config.causalityLevel).costGrades.map(cg => (
+              <div key={cg.grade} className="flex items-center gap-2 text-[10px]">
+                <span className="text-zinc-600 font-black w-6">{cg.grade}등급</span>
+                <span className="text-zinc-400">{language === 'KO' ? cg.name.KO : cg.name.EN}</span>
+                <span className="text-zinc-700 ml-auto">{language === 'KO' ? cg.description.KO : cg.description.EN}</span>
+              </div>
+            ))}
+            <div className="text-[9px] text-zinc-600 pt-1 border-t border-zinc-800/50">
+              {te.causalityProxyCost}: {Math.round(getCausalityLevelDef(config.causalityLevel).proxyCostRate * 100)}%
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Foreshadowing Management */}

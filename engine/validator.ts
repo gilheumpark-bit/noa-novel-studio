@@ -6,6 +6,7 @@ import { validateWorldConsistency } from './worldConsistency';
 import { validatePOV } from './povManager';
 import { validateDialogue } from './dialogueDNA';
 import { validateEmotionalArc, extractEmotionalState } from './emotionalArc';
+import { validateCausality } from './causalityEngine';
 import { POVType } from './types';
 
 // ============================================================
@@ -279,6 +280,13 @@ export function validateGeneratedContent(
     if (config.emotionalHistory && config.emotionalHistory.length > 0 && config.povCharacter) {
       const currentState = extractEmotionalState(text, config.povCharacter, currentEpisode);
       allIssues.push(...validateEmotionalArc(config.emotionalHistory, currentState));
+    }
+
+    // CausalityEngine — banned words + EH style lock validation
+    if (config.causalityLevel) {
+      const causalityResult = validateCausality(text, config.causalityLevel, config.ehScore);
+      allFixes.push(...causalityResult.fixes);
+      allIssues.push(...causalityResult.issues);
     }
   }
 
