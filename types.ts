@@ -27,7 +27,53 @@ export type GenerationMode = 'cloud' | 'local';
 export type ViewMode = 'mobile' | 'desktop';
 export type AppLanguage = 'KO' | 'EN' | 'JP' | 'CN';
 
-export type AppTab = 'world' | 'writing' | 'history' | 'critique' | 'settings' | 'characters' | 'rulebook';
+export type AppTab = 'world' | 'directing' | 'writing' | 'history' | 'critique' | 'settings' | 'characters' | 'rulebook';
+
+// ============================================================
+// Scene Sheet / Directing Types
+// ============================================================
+
+export type BeatType = 'goguma' | 'cider' | 'dopamine' | 'hook' | 'tension' | 'breather';
+
+export interface SceneBeat {
+  id: string;
+  type: BeatType;
+  description: string;
+  /** 0-100 intensity */
+  intensity: number;
+}
+
+export interface SceneEntry {
+  id: string;
+  sceneNumber: number;
+  title: string;
+  location: string;
+  characters: string[];
+  /** Directing / mood note */
+  mood: string;
+  /** Emotional target for the scene */
+  emotion: string;
+  /** Beats within this scene */
+  beats: SceneBeat[];
+  /** Character dialogue notes for this scene */
+  dialogueNotes: SceneDialogueNote[];
+}
+
+export interface SceneDialogueNote {
+  characterName: string;
+  note: string;
+}
+
+export interface EpisodeDirecting {
+  episode: number;
+  scenes: SceneEntry[];
+  /** Episode-level hook (opening) */
+  openingHook: string;
+  /** Episode-level cliffhanger (ending) */
+  endingHook: string;
+  /** Overall episode mood/atmosphere direction */
+  overallMood: string;
+}
 
 export interface PclGuardrails {
   min: number;
@@ -66,6 +112,8 @@ export interface StoryConfig {
   causalityLevel?: CausalityLevel;
   /** EH score tracker for Level 5 (0-100, starts at 100) */
   ehScore?: number;
+  /** Episode directing / scene sheet */
+  episodeDirecting?: EpisodeDirecting;
   // Agent system — internal, not serialized
   _agentSignal?: AbortSignal;
 }

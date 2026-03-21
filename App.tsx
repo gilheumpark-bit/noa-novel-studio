@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus, Settings, Send,
   Sparkles, Menu, Globe, UserCircle,
-  BookOpen, Zap, Ghost, X, PenTool, History, StopCircle, Key, LogOut
+  BookOpen, Zap, Ghost, X, PenTool, History, StopCircle, Key, LogOut, Film
 } from 'lucide-react';
 import {
   Message, StoryConfig, Genre,
@@ -19,6 +19,7 @@ import PlanningView from './components/PlanningView';
 import ResourceView from './components/ResourceView';
 import SettingsView from './components/SettingsView';
 import RulebookView from './components/RulebookView';
+import DirectingView from './components/DirectingView';
 import EngineDashboard from './components/EngineDashboard';
 import EngineStatusBar from './components/EngineStatusBar';
 import ApiKeyModal from './components/ApiKeyModal';
@@ -602,6 +603,7 @@ function App() {
             {([
               { tab: 'world' as AppTab, icon: Globe, label: t.sidebar.worldBible },
               { tab: 'characters' as AppTab, icon: UserCircle, label: t.sidebar.characterStudio },
+              { tab: 'directing' as AppTab, icon: Film, label: t.sidebar.directing },
               { tab: 'rulebook' as AppTab, icon: BookOpen, label: t.sidebar.rulebook },
               { tab: 'writing' as AppTab, icon: PenTool, label: t.sidebar.writingMode },
               { tab: 'history' as AppTab, icon: History, label: t.sidebar.archives },
@@ -691,6 +693,13 @@ function App() {
                 )}
                 {activeTab === 'characters' && currentSession && (
                   <ResourceView
+                    language={language}
+                    config={currentSession.config}
+                    setConfig={setConfig}
+                  />
+                )}
+                {activeTab === 'directing' && currentSession && (
+                  <DirectingView
                     language={language}
                     config={currentSession.config}
                     setConfig={setConfig}

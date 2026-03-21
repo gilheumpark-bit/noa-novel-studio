@@ -91,7 +91,10 @@ export function buildSystemInstruction(
     ? buildCausalityDirective(config.causalityLevel, config.ehScore, isKO)
     : '';
 
-  const ans95Sections = [causalityDir, eosFeedback, foreshadowingDir, worldDir, dialogueDir, emotionalDir]
+  // Episode Directing Sheet (if scenes are set)
+  const directingDir = buildDirectingDirective(config);
+
+  const ans95Sections = [causalityDir, directingDir, eosFeedback, foreshadowingDir, worldDir, dialogueDir, emotionalDir]
     .filter(s => s.length > 0)
     .join('\n\n');
 
@@ -179,6 +182,57 @@ ${draft}
 
 Please execute the high-density narrative generation in ${langName}.
 All analysis results and JSON critiques must also be provided in ${langName}.`;
+}
+
+// ============================================================
+// Episode Directing Directive Builder
+// ============================================================
+
+const BEAT_LABELS: Record<string, string> = {
+  goguma: '고구마(답답)',
+  cider: '사이다(시원)',
+  dopamine: '도파민(쾌감)',
+  hook: '훅(몰입)',
+  tension: '긴장',
+  breather: '숨고르기',
+};
+
+function buildDirectingDirective(config: StoryConfig): string {
+  const d = config.episodeDirecting;
+  if (!d || d.scenes.length === 0) return '';
+
+  const lines: string[] = [];
+  lines.push('[EPISODE DIRECTING SHEET]');
+
+  if (d.overallMood) lines.push(`전체 분위기: ${d.overallMood}`);
+  if (d.openingHook) lines.push(`오프닝 훅: ${d.openingHook}`);
+  if (d.endingHook) lines.push(`엔딩 클리프행어: ${d.endingHook}`);
+
+  for (const scene of d.scenes) {
+    lines.push('');
+    lines.push(`[S${scene.sceneNumber}] ${scene.title || '무제'}`);
+    if (scene.location) lines.push(`  장소: ${scene.location}`);
+    if (scene.characters.length > 0) lines.push(`  등장인물: ${scene.characters.join(', ')}`);
+    if (scene.mood) lines.push(`  연출: ${scene.mood}`);
+    if (scene.emotion) lines.push(`  감정: ${scene.emotion}`);
+
+    if (scene.beats.length > 0) {
+      lines.push('  비트:');
+      for (const beat of scene.beats) {
+        const label = BEAT_LABELS[beat.type] || beat.type;
+        lines.push(`    - [${label} ${beat.intensity}%] ${beat.description}`);
+      }
+    }
+
+    if (scene.dialogueNotes.length > 0) {
+      lines.push('  대사 노트:');
+      for (const dn of scene.dialogueNotes) {
+        lines.push(`    - ${dn.characterName}: ${dn.note}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
 }
 
 // ============================================================
