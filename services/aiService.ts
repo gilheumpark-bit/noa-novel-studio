@@ -655,6 +655,134 @@ Return valid JSON with this structure:
 }
 
 // ============================================================
+// Public API: generateBrainstorm
+// ============================================================
+
+export async function generateBrainstorm(
+  config: StoryConfig,
+  userPrompt: string,
+  language: AppLanguage = 'KO'
+): Promise<string[]> {
+  const { provider, apiKey, model } = getCurrentProviderConfig();
+  if (!apiKey) throw new Error("API_KEY_INVALID");
+
+  const langNames: Record<AppLanguage, string> = {
+    'KO': 'Korean', 'EN': 'English', 'JP': 'Japanese', 'CN': 'Chinese'
+  };
+
+  const prompt = `You are a creative writing consultant.
+
+[STORY CONTEXT]
+Title: ${config.title}
+Genre: ${config.genre}
+Synopsis: ${config.synopsis || 'Not provided'}
+Characters: ${config.characters.map(c => c.name).join(', ') || 'None'}
+Current Episode: ${config.episode} of ${config.totalEpisodes}
+
+[REQUEST]
+${userPrompt}
+
+IMPORTANT: Respond in ${langNames[language]}. Return a JSON array of 5 strings, each being a distinct creative idea. Example: ["idea 1", "idea 2", ...]`;
+
+  let results: any;
+  try {
+    switch (provider) {
+      case 'gemini':
+        results = await generateJSONGemini(apiKey, model, prompt);
+        break;
+      case 'openai':
+        results = await generateJSONOpenAI(apiKey, model, prompt);
+        break;
+      case 'claude':
+        results = await generateJSONClaude(apiKey, model, prompt);
+        break;
+      default:
+        throw new Error(`Unknown AI provider: ${provider}`);
+    }
+  } catch (error) {
+    console.error("Brainstorm Error:", error);
+    throw error;
+  }
+
+  if (Array.isArray(results)) return results.map(String);
+  if (results?.ideas) return results.ideas.map(String);
+  return [];
+}
+
+// ============================================================
+// Public API: selectionAction (Rewrite/Expand/Shrink/Describe)
+// ============================================================
+
+export async function selectionAction(
+  action: 'rewrite' | 'expand' | 'shrink' | 'describe',
+  selectedText: string,
+  config: StoryConfig,
+  language: AppLanguage = 'KO'
+): Promise<string> {
+  const { provider, apiKey, model } = getCurrentProviderConfig();
+  if (!apiKey) throw new Error("API_KEY_INVALID");
+
+  const langNames: Record<AppLanguage, string> = {
+    'KO': 'Korean', 'EN': 'English', 'JP': 'Japanese', 'CN': 'Chinese'
+  };
+
+  const instructions: Record<string, string> = {
+    rewrite: `Rewrite the following text to improve quality, flow, and style while keeping the same meaning. Genre: ${config.genre}.`,
+    expand: `Expand the following text with more sensory details, internal thoughts, and vivid descriptions. Double the length approximately. Genre: ${config.genre}.`,
+    shrink: `Condense the following text to roughly half its length while keeping the core meaning and impact. Genre: ${config.genre}.`,
+    describe: `Enhance the following text with rich sensory descriptions (sight, sound, smell, touch, taste). Make it cinematic and immersive. Genre: ${config.genre}.`,
+  };
+
+  const prompt = `${instructions[action]}
+
+IMPORTANT: Respond ONLY with the rewritten text in ${langNames[language]}. No explanations, no JSON, no markdown — just the pure narrative text.
+
+[TEXT TO ${action.toUpperCase()}]
+${selectedText}`;
+
+  let result = '';
+  try {
+    switch (provider) {
+      case 'gemini': {
+        const { GoogleGenAI } = await import(/* @vite-ignore */ '@google/genai');
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({ model, contents: prompt });
+        result = response.text ?? '';
+        break;
+      }
+      case 'openai': {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.8 }),
+        });
+        const data = await response.json();
+        result = data.choices?.[0]?.message?.content || '';
+        break;
+      }
+      case 'claude': {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json', 'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({ model, max_tokens: 4096, messages: [{ role: 'user', content: prompt }] }),
+        });
+        const data = await response.json();
+        result = data.content?.[0]?.text || '';
+        break;
+      }
+    }
+  } catch (error) {
+    console.error(`Selection ${action} failed:`, error);
+    throw error;
+  }
+
+  return result.trim();
+}
+
+// ============================================================
 // Public API: testApiKey
 // ============================================================
 

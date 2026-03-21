@@ -3,7 +3,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus, Settings, Send,
   Sparkles, Menu, Globe, UserCircle,
-  BookOpen, Zap, Ghost, X, PenTool, History, StopCircle, Key, LogOut, Film
+  BookOpen, Zap, Ghost, X, PenTool, History, StopCircle, Key, LogOut, Film,
+  Lightbulb, LayoutGrid, Download, Upload, Search, FileText,
 } from 'lucide-react';
 import {
   Message, StoryConfig, Genre,
@@ -20,10 +21,16 @@ import ResourceView from './components/ResourceView';
 import SettingsView from './components/SettingsView';
 import RulebookView from './components/RulebookView';
 import DirectingView from './components/DirectingView';
+import BrainstormView from './components/BrainstormView';
+import OutlineBoard from './components/OutlineBoard';
+import RelationshipMap from './components/RelationshipMap';
+import SearchReplace from './components/SearchReplace';
+import SelectionToolbar from './components/SelectionToolbar';
 import EngineDashboard from './components/EngineDashboard';
 import EngineStatusBar from './components/EngineStatusBar';
 import ApiKeyModal from './components/ApiKeyModal';
-import { generateStoryStream, hasAnyApiKey, clearAllApiKeys } from './services/aiService';
+import { generateStoryStream, hasAnyApiKey, clearAllApiKeys, selectionAction } from './services/aiService';
+import { exportAsTXT, exportAsHTML, exportAsPDF, exportSessionJSON, importSessionJSON } from './services/exportService';
 import { analyzeEOSFailure } from './engine/eosFeedback';
 import { extractEmotionalState } from './engine/emotionalArc';
 import { calculateEOSScore } from './engine/scoring';
@@ -103,8 +110,10 @@ function App() {
   const [input, setInput] = useState('');
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showSearchReplace, setShowSearchReplace] = useState(false);
   const [lastReport, setLastReport] = useState<EngineReport | null>(null);
   const [, forceUpdate] = useState(0);
+  const writingAreaRef = useRef<HTMLDivElement>(null);
   const [agentPipelineState, setAgentPipelineState] = useState<AgentPipelineState | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(() => hasAnyApiKey());
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -173,6 +182,73 @@ function App() {
     setActiveTab(tab);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
+
+  // --- Message editing (inline edit + search/replace) ---
+  const updateMessageContent = useCallback((messageId: string, newContent: string) => {
+    const idx = sessions.findIndex(s => s.id === currentSessionId);
+    if (idx < 0) return;
+    const session = sessions[idx];
+    const newMessages = session.messages.map(m =>
+      m.id === messageId ? { ...m, content: newContent } : m
+    );
+    sessions[idx] = { ...session, messages: newMessages, lastUpdate: Date.now() };
+    forceUpdate(n => n + 1);
+  }, [sessions, currentSessionId]);
+
+  // --- Selection AI action ---
+  const handleSelectionAction = useCallback(async (action: 'rewrite' | 'expand' | 'shrink' | 'describe', text: string): Promise<string> => {
+    const session = sessions.find(s => s.id === currentSessionId);
+    if (!session) return '';
+    return selectionAction(action, text, session.config, language);
+  }, [sessions, currentSessionId, language]);
+
+  const handleSelectionReplace = useCallback((original: string, replacement: string) => {
+    const session = sessions.find(s => s.id === currentSessionId);
+    if (!session) return;
+    // Find the message containing the original text and replace
+    for (const msg of session.messages) {
+      if (msg.role === 'assistant' && msg.content.includes(original)) {
+        updateMessageContent(msg.id, msg.content.replace(original, replacement));
+        break;
+      }
+    }
+  }, [sessions, currentSessionId, updateMessageContent]);
+
+  // --- Export handlers ---
+  const handleExport = useCallback((format: 'txt' | 'html' | 'pdf' | 'json') => {
+    const session = sessions.find(s => s.id === currentSessionId);
+    if (!session) return;
+    switch (format) {
+      case 'txt': exportAsTXT(session.messages, session.config); break;
+      case 'html': exportAsHTML(session.messages, session.config); break;
+      case 'pdf': exportAsPDF(session.messages, session.config); break;
+      case 'json': exportSessionJSON(session); break;
+    }
+  }, [sessions, currentSessionId]);
+
+  const handleImportSession = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const data = await importSessionJSON(file);
+      const newSession: ChatSession = {
+        id: crypto.randomUUID(),
+        title: data.title || 'Imported Session',
+        messages: data.messages || [],
+        config: { ...INITIAL_CONFIG, ...data.config },
+        lastUpdate: Date.now(),
+        agentConfig: data.agentConfig,
+        memoryStore: data.memoryStore,
+        arcStore: data.arcStore,
+      };
+      sessions.unshift(newSession);
+      setCurrentSessionId(newSession.id);
+      forceUpdate(n => n + 1);
+    } catch (err) {
+      console.error('Import failed:', err);
+    }
+    e.target.value = '';
+  }, [sessions]);
 
   const deleteSession = (sessionIdToDelete: string) => {
     const sessionToDelete = sessions.find(s => s.id === sessionIdToDelete);
@@ -604,6 +680,8 @@ function App() {
               { tab: 'world' as AppTab, icon: Globe, label: t.sidebar.worldBible },
               { tab: 'characters' as AppTab, icon: UserCircle, label: t.sidebar.characterStudio },
               { tab: 'directing' as AppTab, icon: Film, label: t.sidebar.directing },
+              { tab: 'brainstorm' as AppTab, icon: Lightbulb, label: t.sidebar.brainstorm },
+              { tab: 'outline' as AppTab, icon: LayoutGrid, label: t.sidebar.outline },
               { tab: 'rulebook' as AppTab, icon: BookOpen, label: t.sidebar.rulebook },
               { tab: 'writing' as AppTab, icon: PenTool, label: t.sidebar.writingMode },
               { tab: 'history' as AppTab, icon: History, label: t.sidebar.archives },
@@ -691,19 +769,45 @@ function App() {
                     onStart={() => setActiveTab('writing')}
                   />
                 )}
-                {activeTab === 'characters' && currentSession && (
-                  <ResourceView
-                    language={language}
-                    config={currentSession.config}
-                    setConfig={setConfig}
-                  />
-                )}
                 {activeTab === 'directing' && currentSession && (
                   <DirectingView
                     language={language}
                     config={currentSession.config}
                     setConfig={setConfig}
                   />
+                )}
+                {activeTab === 'brainstorm' && currentSession && (
+                  <BrainstormView
+                    language={language}
+                    config={currentSession.config}
+                  />
+                )}
+                {activeTab === 'outline' && currentSession && (
+                  <OutlineBoard
+                    language={language}
+                    config={currentSession.config}
+                    setConfig={setConfig}
+                    onNavigateToEpisode={(ep) => {
+                      setConfig({ ...currentSession.config, episode: ep });
+                      setActiveTab('writing');
+                    }}
+                  />
+                )}
+                {activeTab === 'characters' && currentSession && (
+                  <div className="space-y-8">
+                    <ResourceView
+                      language={language}
+                      config={currentSession.config}
+                      setConfig={setConfig}
+                    />
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-10">
+                      <RelationshipMap
+                        language={language}
+                        config={currentSession.config}
+                        setConfig={setConfig}
+                      />
+                    </div>
+                  </div>
                 )}
                 {activeTab === 'settings' && (
                   <SettingsView
@@ -716,7 +820,7 @@ function App() {
                   <RulebookView language={language} />
                 )}
                 {activeTab === 'writing' && currentSession && (
-                  <div className="max-w-4xl mx-auto py-8 px-4 md:py-12 md:px-6 space-y-12">
+                  <div className="max-w-4xl mx-auto py-8 px-4 md:py-12 md:px-6 space-y-6">
                     <EngineStatusBar
                       language={language}
                       config={currentSession.config}
@@ -724,16 +828,71 @@ function App() {
                       isGenerating={isGenerating}
                     />
 
-                    {currentSession.messages.length === 0 ? (
-                      <div className="py-20 text-center space-y-4">
-                        <Sparkles className="w-10 h-10 text-blue-900 mx-auto" />
-                        <p className="text-zinc-600 text-sm font-medium">{t.engine.startPrompt}</p>
+                    {/* Writing toolbar: export, search, word count */}
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => handleExport('txt')} className="flex items-center gap-1 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-[8px] font-black text-zinc-600 hover:text-zinc-300 transition-all" title="TXT">
+                          <FileText className="w-3 h-3" /> TXT
+                        </button>
+                        <button onClick={() => handleExport('html')} className="flex items-center gap-1 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-[8px] font-black text-zinc-600 hover:text-zinc-300 transition-all" title="HTML/Word">
+                          <Download className="w-3 h-3" /> HTML
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="flex items-center gap-1 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-[8px] font-black text-zinc-600 hover:text-zinc-300 transition-all" title="PDF">
+                          <Download className="w-3 h-3" /> PDF
+                        </button>
+                        <button onClick={() => handleExport('json')} className="flex items-center gap-1 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-[8px] font-black text-zinc-600 hover:text-zinc-300 transition-all" title="JSON Backup">
+                          <Download className="w-3 h-3" /> JSON
+                        </button>
+                        <label className="flex items-center gap-1 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-[8px] font-black text-zinc-600 hover:text-zinc-300 transition-all cursor-pointer" title="Import JSON">
+                          <Upload className="w-3 h-3" /> {t.export?.import || 'Import'}
+                          <input type="file" accept=".json" className="hidden" onChange={handleImportSession} />
+                        </label>
+                        <button onClick={() => setShowSearchReplace(!showSearchReplace)} className={`flex items-center gap-1 px-2 py-1 border rounded-lg text-[8px] font-black transition-all ${showSearchReplace ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600 hover:text-zinc-300'}`}>
+                          <Search className="w-3 h-3" /> {language === 'KO' ? '검색' : 'Find'}
+                        </button>
                       </div>
-                    ) : (
-                      currentSession.messages.map(msg => (
-                        <ChatMessage key={msg.id} message={msg} language={language} onRegenerate={msg.role === 'assistant' ? handleRegenerate : undefined} />
-                      ))
+                      {/* Live word/char counter */}
+                      {currentSession.messages.length > 0 && (() => {
+                        const totalText = currentSession.messages.filter(m => m.role === 'assistant').map(m => m.content).join('');
+                        const charCount = totalText.length;
+                        const wordCount = totalText.split(/\s+/).filter(Boolean).length;
+                        return (
+                          <span className="text-[9px] font-black text-zinc-700">
+                            {charCount.toLocaleString()}{language === 'KO' ? '자' : ' chars'} / {wordCount.toLocaleString()}{language === 'KO' ? '어절' : ' words'}
+                          </span>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Search/Replace panel */}
+                    {showSearchReplace && (
+                      <SearchReplace
+                        language={language}
+                        messages={currentSession.messages}
+                        onUpdateMessage={updateMessageContent}
+                        onClose={() => setShowSearchReplace(false)}
+                      />
                     )}
+
+                    {/* Messages with selection toolbar */}
+                    <div ref={writingAreaRef} className="relative space-y-12">
+                      <SelectionToolbar
+                        language={language}
+                        onAction={handleSelectionAction}
+                        containerRef={writingAreaRef}
+                        onReplace={handleSelectionReplace}
+                      />
+                      {currentSession.messages.length === 0 ? (
+                        <div className="py-20 text-center space-y-4">
+                          <Sparkles className="w-10 h-10 text-blue-900 mx-auto" />
+                          <p className="text-zinc-600 text-sm font-medium">{t.engine.startPrompt}</p>
+                        </div>
+                      ) : (
+                        currentSession.messages.map(msg => (
+                          <ChatMessage key={msg.id} message={msg} language={language} onRegenerate={msg.role === 'assistant' ? handleRegenerate : undefined} />
+                        ))
+                      )}
+                    </div>
                     <div ref={messagesEndRef} className="h-32" />
                   </div>
                 )}
