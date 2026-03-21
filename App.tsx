@@ -4,7 +4,7 @@ import {
   Plus, Settings, Send,
   Sparkles, Menu, Globe, UserCircle,
   BookOpen, Zap, Ghost, X, PenTool, History, StopCircle, Key, LogOut, Film,
-  Lightbulb, LayoutGrid, Download, Upload, Search, FileText,
+  Lightbulb, LayoutGrid, Download, Upload, Search, FileText, Compass,
 } from 'lucide-react';
 import {
   Message, StoryConfig, Genre,
@@ -26,6 +26,7 @@ import OutlineBoard from './components/OutlineBoard';
 import RelationshipMap from './components/RelationshipMap';
 import SearchReplace from './components/SearchReplace';
 import SelectionToolbar from './components/SelectionToolbar';
+import WorldSimulator from './components/WorldSimulator';
 import EngineDashboard from './components/EngineDashboard';
 import EngineStatusBar from './components/EngineStatusBar';
 import ApiKeyModal from './components/ApiKeyModal';
@@ -678,6 +679,7 @@ function App() {
           <nav className="space-y-1">
             {([
               { tab: 'world' as AppTab, icon: Globe, label: t.sidebar.worldBible },
+              { tab: 'simulator' as AppTab, icon: Compass, label: t.sidebar.simulator },
               { tab: 'characters' as AppTab, icon: UserCircle, label: t.sidebar.characterStudio },
               { tab: 'directing' as AppTab, icon: Film, label: t.sidebar.directing },
               { tab: 'brainstorm' as AppTab, icon: Lightbulb, label: t.sidebar.brainstorm },
@@ -767,6 +769,17 @@ function App() {
                     config={currentSession.config}
                     setConfig={setConfig}
                     onStart={() => setActiveTab('writing')}
+                  />
+                )}
+                {activeTab === 'simulator' && currentSession && (
+                  <WorldSimulator
+                    language={language}
+                    config={currentSession.config}
+                    setConfig={setConfig}
+                    onGenerateEvents={async (prompt) => {
+                      const { generateBrainstorm } = await import('./services/aiService');
+                      return generateBrainstorm(currentSession.config, prompt, language);
+                    }}
                   />
                 )}
                 {activeTab === 'directing' && currentSession && (

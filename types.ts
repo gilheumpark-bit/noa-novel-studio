@@ -27,7 +27,7 @@ export type GenerationMode = 'cloud' | 'local';
 export type ViewMode = 'mobile' | 'desktop';
 export type AppLanguage = 'KO' | 'EN' | 'JP' | 'CN';
 
-export type AppTab = 'world' | 'directing' | 'brainstorm' | 'outline' | 'writing' | 'history' | 'critique' | 'settings' | 'characters' | 'rulebook';
+export type AppTab = 'world' | 'simulator' | 'directing' | 'brainstorm' | 'outline' | 'writing' | 'history' | 'critique' | 'settings' | 'characters' | 'rulebook';
 
 // ============================================================
 // Scene Sheet / Directing Types
